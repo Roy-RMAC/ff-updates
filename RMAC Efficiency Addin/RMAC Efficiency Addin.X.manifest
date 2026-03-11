@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+
+  <assemblyIdentity name="RMAC_Efficiency_Addin" version="1.0.0.0"></assemblyIdentity>
+
+  <clrClass clsid="{9889ec7f-aa24-4569-bd57-c5b0038466f5}" progid="RMAC_Efficiency_Addin.StandardAddInServer" threadingModel="Both" name="RMAC_Efficiency_Addin.StandardAddInServer" runtimeVersion=""></clrClass>
+
+  <file name="RMAC_Efficiency_Addin.dll" hashalg="SHA1"></file>
+
+</assembly>

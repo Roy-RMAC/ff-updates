@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  RMAC Efficiency Addin - MSI Package
+  ====================================
+  Build:  dotnet build -c Installer  (main project first)
+          dotnet build Package.wixproj
+
+  UpgradeCode is PERMANENT. Never change it - it enables seamless major upgrades.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package Name="RMAC Efficiency Addin"
+           Manufacturer="RMAC Design"
+           Version="1.0.0.0"
+           UpgradeCode="A72F8B3E-5D14-49C6-B8E1-7F3A2D6C9E45"
+           Compressed="yes"
+           InstallerVersion="500"
+           Scope="perMachine">
+
+    <SummaryInformation Description="RMAC Efficiency Addin for Autodesk Inventor 2025" />
+
+    <!-- Automatically removes older versions during upgrade -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- ============================================================
+         Directory layout
+         ============================================================ -->
+
+    <!-- DLLs and dependencies -->
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="CompanyDir" Name="RMAC Design">
+        <Directory Id="INSTALLFOLDER" Name="RMAC Efficiency Addin" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- .addin manifest (all-users, version-independent Inventor location) -->
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="AutodeskDir" Name="Autodesk">
+        <Directory Id="ADDINSFOLDER" Name="Inventor Addins" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- ============================================================
+         Feature tree
+         ============================================================ -->
+
+    <Feature Id="Main" Title="RMAC Efficiency Addin" Level="1">
+      <ComponentGroupRef Id="AddinFiles" />
+      <ComponentRef Id="AddinManifest" />
+    </Feature>
+
+  </Package>
+
+  <!-- ==============================================================
+       Addin DLLs, .deps.json, runtimes subfolder, etc.
+       Auto-harvested from the Installer build output folder.
+       Add or remove NuGet packages in the main project and they
+       are automatically picked up here - no manual file list needed.
+       ============================================================== -->
+  <Fragment>
+    <ComponentGroup Id="AddinFiles" Directory="INSTALLFOLDER">
+      <Files Include="..\..\InstallerBuild\**" />
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- ==============================================================
+       .addin manifest - deployed to Inventor's common addins folder.
+       The template ships with PLACEHOLDER in the Assembly element;
+       util:XmlFile patches it at install time with the real path.
+       ============================================================== -->
+  <Fragment>
+    <Component Id="AddinManifest" Directory="ADDINSFOLDER" Guid="C94FAD5F-7F36-4BE8-DAA3-9B5C4F8E1A67">
+      <File Id="AddinFile"
+            Source="Addin.addin"
+            Name="Autodesk.RMAC Efficiency Addin.Inventor.addin" />
+
+      <util:XmlFile Id="PatchAssemblyPath"
+                    File="[#AddinFile]"
+                    Action="setValue"
+                    ElementPath="/Addin/Assembly"
+                    Value="[INSTALLFOLDER]RMAC Efficiency Addin.dll" />
+    </Component>
+  </Fragment>
+
+</Wix>

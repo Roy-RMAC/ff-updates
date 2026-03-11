@@ -1,0 +1,186 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- Core project properties -->
+	<PropertyGroup>
+		<Configurations>Debug;Release;Installer</Configurations>
+		<TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
+		<SupportedOSPlatformVersion>6.1</SupportedOSPlatformVersion>
+		<EnableNETAnalyzers>false</EnableNETAnalyzers>
+		<UseWindowsForms>true</UseWindowsForms>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+		<Nullable>enable</Nullable>
+
+		<ProjectType>Local</ProjectType>
+		<DelaySign>false</DelaySign>
+		<OutputType>Library</OutputType>
+		<RootNamespace>RMAC_Efficiency_Addin</RootNamespace>
+		<RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
+		<AssemblyKeyContainerName></AssemblyKeyContainerName>
+		<AssemblyOriginatorKeyFile></AssemblyOriginatorKeyFile>
+		<DefaultClientScript>JScript</DefaultClientScript>
+		<DefaultHTMLPageLayout>Grid</DefaultHTMLPageLayout>
+		<DefaultTargetSchema>IE50</DefaultTargetSchema>
+		<StartupObject></StartupObject>
+
+		<!-- Inventor addin metadata -->
+		<AddinGuid>9889ec7f-aa24-4569-bd57-c5b0038466f5</AddinGuid>
+		<AddinDisplayName>RMAC Efficiency Addin</AddinDisplayName>
+		<AddinDescription>RMAC internal productivity tools.</AddinDescription>
+		<AddinFileName>Autodesk.RMAC Efficiency Addin.Inventor.addin</AddinFileName>
+
+		<!-- These were previously defined inside the Target; keep them at top-level -->
+		<InventorAddinsDir>$(APPDATA)\Autodesk\Inventor 2025\Addins</InventorAddinsDir>
+		<AddinFullPath>$(InventorAddinsDir)\$(AddinFileName)</AddinFullPath>
+		<AddinGuidUpper>$([System.String]::Copy('$(AddinGuid)').ToUpperInvariant())</AddinGuidUpper>
+	</PropertyGroup>
+
+	<!-- Debug configuration -->
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+		<BaseAddress>285212672</BaseAddress>
+		<ConfigurationOverrideFile></ConfigurationOverrideFile>
+		<DocumentationFile></DocumentationFile>
+		<FileAlignment>4096</FileAlignment>
+		<NoStdLib>false</NoStdLib>
+		<NoWarn></NoWarn>
+		<RegisterForComInterop>false</RegisterForComInterop>
+		<RemoveIntegerChecks>false</RemoveIntegerChecks>
+		<CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+
+		<!-- Debug output stays in your Deploy folder -->
+		<OutputPath>..\..\Deploy\</OutputPath>
+	</PropertyGroup>
+
+	<!-- Release configuration -->
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<BaseAddress>285212672</BaseAddress>
+		<ConfigurationOverrideFile></ConfigurationOverrideFile>
+		<DocumentationFile></DocumentationFile>
+		<FileAlignment>4096</FileAlignment>
+		<NoStdLib>false</NoStdLib>
+		<NoWarn></NoWarn>
+		<RegisterForComInterop>false</RegisterForComInterop>
+		<RemoveIntegerChecks>false</RemoveIntegerChecks>
+		<DebugType>none</DebugType>
+		<CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+
+		<!-- Release output goes to the live Inventor addins folder -->
+		<OutputPath>D:\RMAC Design Data\Inventor\Addins\RMAC Efficency</OutputPath>
+	</PropertyGroup>
+
+	<!-- Installer configuration (for WiX MSI packaging) -->
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Installer|AnyCPU'">
+		<OutputPath>..\InstallerBuild\</OutputPath>
+		<DebugType>none</DebugType>
+	</PropertyGroup>
+
+	<!-- Resource cleanup -->
+	<ItemGroup>
+		<None Remove="Resources\ChatGPT Image Jan 25, 2026, 10_44_27 PM.png" />
+		<None Remove="Resources\thickness_from_line_32x32.png" />
+		<None Remove="Resources\Turn Off Sketches.png" />
+		<None Remove="Resources\Turn On Sketches.png" />
+	</ItemGroup>
+
+	<!-- COM reference -->
+	<ItemGroup>
+		<COMReference Include="stdole">
+			<WrapperTool>tlbimp</WrapperTool>
+			<VersionMinor>0</VersionMinor>
+			<VersionMajor>2</VersionMajor>
+			<Guid>00020430-0000-0000-c000-000000000046</Guid>
+			<Lcid>0</Lcid>
+			<Isolated>false</Isolated>
+			<EmbedInteropTypes>true</EmbedInteropTypes>
+		</COMReference>
+	</ItemGroup>
+
+	<!-- Embedded resources -->
+	<ItemGroup>
+		<EmbeddedResource Include="Resources\ChatGPT Image Jan 25, 2026, 10_44_27 PM.png" />
+		<EmbeddedResource Include="Resources\thickness_from_line_32x32.png" />
+		<EmbeddedResource Include="Resources\Turn Off Sketches.png" />
+		<EmbeddedResource Include="Resources\Turn On Sketches.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="RMAC Efficiency Addin.X.manifest" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="Autodesk.RMAC Efficiency Addin.Inventor.addin" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="Readme.txt" />
+	</ItemGroup>
+
+	<!-- Krypton Toolkit (modern WinForms theming) -->
+	<ItemGroup>
+		<PackageReference Include="Krypton.Toolkit" Version="100.26.1.19" />
+		<PackageReference Include="Krypton.Navigator" Version="100.26.1.19" />
+	</ItemGroup>
+
+	<!-- DXF file manipulation (replaces external AutoCAD-based post-processor) -->
+	<ItemGroup>
+		<PackageReference Include="IxMilia.Dxf" Version="0.8.4" />
+	</ItemGroup>
+
+	<!-- PDF merging (replaces Adobe Acrobat COM dependency) -->
+	<ItemGroup>
+		<PackageReference Include="PDFsharp-GDI" Version="6.2.4" />
+	</ItemGroup>
+
+	<!-- Inventor interop reference -->
+	<ItemGroup>
+		<Reference Include="Autodesk.Inventor.Interop">
+			<HintPath Condition="Exists('$(programfiles)\Autodesk\Inventor 2025\Bin')">$(programfiles)\Autodesk\Inventor 2025\Bin\Autodesk.Inventor.Interop.dll</HintPath>
+			<EmbedInteropTypes>False</EmbedInteropTypes>
+			<Private>True</Private>
+		</Reference>
+	</ItemGroup>
+
+	<!-- Resources designer -->
+	<ItemGroup>
+		<Compile Update="Properties\Resources.Designer.cs">
+			<DesignTime>True</DesignTime>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>Resources.resx</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Update="Properties\Resources.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>Resources.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+	</ItemGroup>
+
+	<!-- Generate .addin file after build and copy it to the build output folder -->
+	<Target Name="GenerateAndDeployInventorAddin" AfterTargets="Build" Condition="'$(Configuration)' != 'Installer'">
+		<MakeDir Directories="$(InventorAddinsDir)" />
+
+		<ItemGroup>
+			<AddinLines Include="&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot;?&gt;" />
+			<AddinLines Include="&lt;Addin Type=&quot;Standard&quot;&gt;" />
+			<AddinLines Include="  &lt;ClassId&gt;{$(AddinGuidUpper)}&lt;/ClassId&gt;" />
+			<AddinLines Include="  &lt;ClientId&gt;{$(AddinGuidUpper)}&lt;/ClientId&gt;" />
+			<AddinLines Include="  &lt;DisplayName&gt;$(AddinDisplayName)&lt;/DisplayName&gt;" />
+			<AddinLines Include="  &lt;Description&gt;$(AddinDescription)&lt;/Description&gt;" />
+			<AddinLines Include="  &lt;Assembly&gt;$(TargetPath)&lt;/Assembly&gt;" />
+			<AddinLines Include="  &lt;LoadOnStartUp&gt;1&lt;/LoadOnStartUp&gt;" />
+			<AddinLines Include="  &lt;UserUnloadable&gt;1&lt;/UserUnloadable&gt;" />
+			<AddinLines Include="&lt;/Addin&gt;" />
+		</ItemGroup>
+
+		<!-- Write to your local Inventor Addins folder (for your machine) -->
+		<WriteLinesToFile File="$(AddinFullPath)" Lines="@(AddinLines)" Overwrite="true" Encoding="UTF-8" />
+
+		<!-- ALSO copy the generated .addin next to the built DLL (Release share folder) -->
+		<Copy SourceFiles="$(AddinFullPath)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+	</Target>
+
+	</Project>

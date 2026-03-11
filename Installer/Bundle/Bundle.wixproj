@@ -1,0 +1,17 @@
+<Project Sdk="WixToolset.Sdk/4.0.5">
+
+  <PropertyGroup>
+    <OutputType>Bundle</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference the Package project so $(var.Package.TargetPath) resolves to the MSI -->
+    <ProjectReference Include="..\Package\Package.wixproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Bal.wixext" Version="4.0.5" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
+  </ItemGroup>
+
+</Project>

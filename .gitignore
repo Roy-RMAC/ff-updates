@@ -416,3 +416,10 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Project-specific
+Deploy/
+InstallerBuild/
+version.json
+*.addin
+!Installer/Package/Addin.addin

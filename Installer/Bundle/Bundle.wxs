@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  RMAC Efficiency Addin - Burn Bootstrapper
+  ==========================================
+  Produces a single Setup.exe that:
+    1. Downloads and installs .NET 8 Desktop Runtime (x64) if needed
+    2. Installs the MSI
+
+  Build order:  main project (Installer config) -> Package -> Bundle
+  Distribute:   the .exe from Bundle's output folder.
+
+  UpgradeCode is PERMANENT. Never change it.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Bundle Name="RMAC Efficiency Addin Setup"
+          Manufacturer="RMAC Design"
+          Version="1.0.0.0"
+          UpgradeCode="B83F9C4E-6E25-4AD7-C9F2-8A4B3E7D0F56">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          LicenseUrl=""
+          Theme="hyperlinkLicense" />
+    </BootstrapperApplication>
+
+    <Chain>
+
+      <!-- ==========================================================
+           .NET 8 Desktop Runtime (x64)
+           The aka.ms URL always redirects to the latest 8.0.x build.
+           The runtime installer is smart: if already present it exits
+           cleanly with a no-op, so no version detection is needed.
+           Permanent=yes keeps the runtime on uninstall (other apps
+           may depend on it).
+           ========================================================== -->
+      <ExePackage
+          Name="windowsdesktop-runtime-8.0-win-x64.exe"
+          DownloadUrl="https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe"
+          InstallArguments="/install /quiet /norestart"
+          RepairArguments="/repair /quiet /norestart"
+          PerMachine="yes"
+          Permanent="yes"
+          Vital="yes"
+          Compressed="no">
+
+        <!-- 1638 = product already installed (success) -->
+        <ExitCode Value="1638" Behavior="success" />
+        <!-- 3010 = reboot required -->
+        <ExitCode Value="3010" Behavior="forceReboot" />
+      </ExePackage>
+
+      <!-- ==========================================================
+           The MSI
+           $(var.Package.TargetPath) resolves via ProjectReference
+           to the built MSI from the Package project.
+           ========================================================== -->
+      <MsiPackage SourceFile="$(var.Package.TargetPath)" />
+
+    </Chain>
+  </Bundle>
+
+</Wix>
