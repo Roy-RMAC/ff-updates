@@ -1,4 +1,4 @@
-﻿using Inventor;
+using Inventor;
 using System;
 using RMAC_Efficiency_Addin.Infrastructure;
 using WF = System.Windows.Forms;
@@ -66,6 +66,10 @@ namespace RMAC_Efficiency_Addin
         private readonly WF.Control _uiInvoker = new WF.Control();
         private bool _invokerReady = false;
 
+        // Tracks which documents have been primed (by FullFileName or DisplayName)
+        private readonly System.Collections.Generic.HashSet<string> _primedDocs
+            = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         private bool _started;
         public bool IsStarted => _started;
 
@@ -128,6 +132,7 @@ namespace RMAC_Efficiency_Addin
 
             ResetSession();
             ResetExit();
+            _primedDocs.Clear();
 
             try { _uiInvoker?.Dispose(); } catch { }
 
@@ -140,6 +145,86 @@ namespace RMAC_Efficiency_Addin
             _suppressCount++;
             try { action(); }
             finally { _suppressCount--; }
+        }
+
+        // ============================================================
+        // Sketch environment priming
+        // ============================================================
+
+        /// <summary>
+        /// Silently edit and exit the first available sketch in the part to prime
+        /// Inventor's sketch environment. This ensures that subsequent user-initiated
+        /// sketch edits have the environment fully initialised (fixes first-edit issues
+        /// with derived sketches and newly opened documents).
+        ///
+        /// Call from OnActivateDocument or similar. Safe to call multiple times per
+        /// document — only primes once per document per session.
+        /// </summary>
+        public void PrimeIfNeeded(PartDocument partDoc)
+        {
+            try
+            {
+                string key = GetDocKey(partDoc);
+                if (string.IsNullOrWhiteSpace(key)) return;
+                if (_primedDocs.Contains(key)) return;
+
+                // Mark as primed immediately to prevent re-entry
+                _primedDocs.Add(key);
+
+                var cd = partDoc.ComponentDefinition;
+
+                // Find any sketch to use for priming
+                object? sketchToPrime = null;
+
+                foreach (object o in cd.Sketches)
+                {
+                    if (o is Sketch sk)
+                    {
+                        sketchToPrime = sk;
+                        break;
+                    }
+                }
+
+                if (sketchToPrime == null)
+                {
+                    foreach (object o in cd.Sketches3D)
+                    {
+                        if (o is Sketch3D sk3)
+                        {
+                            sketchToPrime = sk3;
+                            break;
+                        }
+                    }
+                }
+
+                if (sketchToPrime == null)
+                {
+                    Log("PrimeIfNeeded: no sketches found, skipping.");
+                    return;
+                }
+
+                Log("PrimeIfNeeded: priming sketch environment...");
+
+                RunSuppressed(() =>
+                {
+                    if (sketchToPrime is Sketch s2)
+                    {
+                        s2.Edit();
+                        try { s2.ExitEdit(); } catch { }
+                    }
+                    else if (sketchToPrime is Sketch3D s3)
+                    {
+                        s3.Edit();
+                        try { s3.ExitEdit(); } catch { }
+                    }
+                });
+
+                Log("PrimeIfNeeded: done.");
+            }
+            catch (Exception ex)
+            {
+                Log("PrimeIfNeeded failed: " + ex.Message, "Warn");
+            }
         }
 
         // ============================================================
@@ -177,6 +262,9 @@ namespace RMAC_Efficiency_Addin
                 // Record current Show Format state and only restore if we changed it.
                 bool wasOn = TryGetShowFormatPressed(out bool pressed) ? pressed : false;
                 _restoreShowFormatOnExit = !wasOn;
+
+                // Enter: clear any persisted inactive-palette overrides
+                try { _styler.ClearOverrides(resolvedSketch); } catch { }
 
                 // Enter: dims show-all
                 try { _dims.OnEnter(editTarget); } catch { }

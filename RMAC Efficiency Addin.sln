@@ -7,9 +7,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RMAC Efficiency Addin", "RM
 EndProject
 Project("{2150E333-8FDC-42A7-9B5B-9D9D2B44E547}") = "Installer", "Installer", "{A1B2C3D4-0001-4000-8000-000000000001}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Package", "Installer\Package\Package.wixproj", "{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2}"
+Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "Package", "Installer\Package\Package.wixproj", "{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Bundle", "Installer\Bundle\Bundle.wixproj", "{7F9B3C5E-D2A4-4A68-B1C7-E3F5A7B9D1C3}"
+Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "Bundle", "Installer\Bundle\Bundle.wixproj", "{7F9B3C5E-D2A4-4A68-B1C7-E3F5A7B9D1C3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -24,14 +24,14 @@ Global
 		{43D23E46-7863-48DC-830D-22EB77429EDE}.Installer|Any CPU.Build.0 = Installer|Any CPU
 		{43D23E46-7863-48DC-830D-22EB77429EDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{43D23E46-7863-48DC-830D-22EB77429EDE}.Release|Any CPU.Build.0 = Release|Any CPU
-		{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2}.Debug|Any CPU.ActiveCfg = Release|Any CPU
-		{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2}.Installer|Any CPU.ActiveCfg = Release|Any CPU
-		{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2}.Installer|Any CPU.Build.0 = Release|Any CPU
-		{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{7F9B3C5E-D2A4-4A68-B1C7-E3F5A7B9D1C3}.Debug|Any CPU.ActiveCfg = Release|Any CPU
-		{7F9B3C5E-D2A4-4A68-B1C7-E3F5A7B9D1C3}.Installer|Any CPU.ActiveCfg = Release|Any CPU
-		{7F9B3C5E-D2A4-4A68-B1C7-E3F5A7B9D1C3}.Installer|Any CPU.Build.0 = Release|Any CPU
-		{7F9B3C5E-D2A4-4A68-B1C7-E3F5A7B9D1C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2}.Debug|Any CPU.ActiveCfg = Release|x86
+		{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2}.Installer|Any CPU.ActiveCfg = Release|x86
+		{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2}.Installer|Any CPU.Build.0 = Release|x86
+		{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2}.Release|Any CPU.ActiveCfg = Release|x86
+		{7F9B3C5E-D2A4-4A68-B1C7-E3F5A7B9D1C3}.Debug|Any CPU.ActiveCfg = Release|x86
+		{7F9B3C5E-D2A4-4A68-B1C7-E3F5A7B9D1C3}.Installer|Any CPU.ActiveCfg = Release|x86
+		{7F9B3C5E-D2A4-4A68-B1C7-E3F5A7B9D1C3}.Installer|Any CPU.Build.0 = Release|x86
+		{7F9B3C5E-D2A4-4A68-B1C7-E3F5A7B9D1C3}.Release|Any CPU.ActiveCfg = Release|x86
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{6E8A2B4D-C1F3-4957-A0B6-D2E4F6A8C0B2} = {A1B2C3D4-0001-4000-8000-000000000001}

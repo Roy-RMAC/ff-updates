@@ -420,6 +420,8 @@ FodyWeavers.xsd
 # Project-specific
 Deploy/
 InstallerBuild/
-version.json
 *.addin
 !Installer/Package/Addin.addin
+
+# WiX Bundle - downloaded .NET runtime (not committed, CI downloads it)
+Installer/Bundle/windowsdesktop-runtime-*.exe

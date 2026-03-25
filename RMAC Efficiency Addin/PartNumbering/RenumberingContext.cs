@@ -479,8 +479,16 @@ namespace RMAC_Efficiency_Addin.PartNumbering
                 dynamic ups = GetUserProps(doc);
                 if (ups == null) return;
 
-                dynamic prop = ComItem(ups, propName);
-                prop.Value = value;
+                try
+                {
+                    dynamic prop = ComItem(ups, propName);
+                    prop.Value = value;
+                }
+                catch
+                {
+                    // Property doesn't exist yet — create it.
+                    try { ups.Add(value, propName); } catch { }
+                }
             }
             catch { }
         }

@@ -232,7 +232,13 @@ namespace RMAC_Efficiency_Addin
                 try { progressForm?.UpdateStatusText("Refreshing drawings\u2026"); } catch { }
                 try { RefreshOpenDrawingsReferencingAssembly(app, asmDoc, debug, ctx); } catch { }
 
-                try { progressForm?.SetComplete(); } catch { }
+                // Close progress dialog before showing completion message
+                try { progressForm?.CloseAllowed(); } catch { }
+                try { progressForm?.Dispose(); } catch { }
+                progressForm = null; // prevent double-close in finally
+
+                // Navigate back to the previous document (drawing) before showing completion
+                try { prevDoc?.Activate(); } catch { }
 
                 // Completion UI
                 if (debug)
@@ -253,8 +259,8 @@ namespace RMAC_Efficiency_Addin
             }
             finally
             {
-                // Close progress dialog
-                try { progressForm?.Close(); } catch { }
+                // Close progress dialog (if not already closed in success path)
+                try { progressForm?.CloseAllowed(); } catch { }
                 try { progressForm?.Dispose(); } catch { }
 
                 // Ensure renumber log is closed/flushed (no-op if Debug is off)
@@ -267,6 +273,7 @@ namespace RMAC_Efficiency_Addin
                     try { app.UserInterfaceManager.UserInteractionDisabled = prevUI; } catch { }
                 }
 
+                // Navigate back (safe if already activated in success path)
                 try { prevDoc?.Activate(); } catch { }
 
                 // Clear suppression AFTER ScreenUpdating is restored so any

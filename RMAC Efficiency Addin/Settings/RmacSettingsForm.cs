@@ -171,6 +171,7 @@ namespace RMAC_Efficiency_Addin.UI
             _registry.Add(new CommentSettingsTab(this));
             _registry.Add(new SheetMetalSettingsTab(this));
             _registry.Add(new SketchColoursSettingsTab(this));
+            _registry.Add(new LicenseSettingsTab(this));
 
             _registry.BuildInto(_navigator);
         }

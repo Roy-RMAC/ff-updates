@@ -18,6 +18,8 @@
 		<RootNamespace>RMAC_Efficiency_Addin</RootNamespace>
 		<RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<AssemblyVersion>$(AddinVersion)</AssemblyVersion>
+		<FileVersion>$(AddinVersion)</FileVersion>
 
 		<AssemblyKeyContainerName></AssemblyKeyContainerName>
 		<AssemblyOriginatorKeyFile></AssemblyOriginatorKeyFile>
@@ -134,10 +136,15 @@
 		<PackageReference Include="PDFsharp-GDI" Version="6.2.4" />
 	</ItemGroup>
 
+	<!-- WMI queries for machine fingerprint (licensing) -->
+	<ItemGroup>
+		<PackageReference Include="System.Management" Version="8.*" />
+	</ItemGroup>
+
 	<!-- Inventor interop reference -->
 	<ItemGroup>
 		<Reference Include="Autodesk.Inventor.Interop">
-			<HintPath Condition="Exists('$(programfiles)\Autodesk\Inventor 2025\Bin')">$(programfiles)\Autodesk\Inventor 2025\Bin\Autodesk.Inventor.Interop.dll</HintPath>
+			<HintPath>$(ProgramW6432)\Autodesk\Inventor 2025\Bin\Autodesk.Inventor.Interop.dll</HintPath>
 			<EmbedInteropTypes>False</EmbedInteropTypes>
 			<Private>True</Private>
 		</Reference>
@@ -181,6 +188,22 @@
 
 		<!-- ALSO copy the generated .addin next to the built DLL (Release share folder) -->
 		<Copy SourceFiles="$(AddinFullPath)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+	</Target>
+
+	<!-- Obfuscate the assembly after Installer builds (before WiX packaging) -->
+	<Target Name="ObfuscateAssembly" AfterTargets="Build" Condition="'$(Configuration)' == 'Installer'">
+		<Message Text="Restoring Obfuscar dotnet tool..." Importance="high" />
+		<Exec Command="dotnet tool restore" WorkingDirectory="$(MSBuildThisFileDirectory).." />
+
+		<Message Text="Obfuscating $(TargetFileName)..." Importance="high" />
+		<Exec Command="dotnet obfuscar obfuscar.xml" WorkingDirectory="$(MSBuildThisFileDirectory).." />
+
+		<!-- Replace the original DLL with the obfuscated version -->
+		<Copy SourceFiles="$(MSBuildThisFileDirectory)..\InstallerBuild\Obfuscated\$(TargetFileName)"
+		      DestinationFiles="$(TargetPath)"
+		      OverwriteReadOnlyFiles="true" />
+
+		<Message Text="Obfuscation complete: $(TargetFileName)" Importance="high" />
 	</Target>
 
 	</Project>

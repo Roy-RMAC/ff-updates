@@ -381,7 +381,7 @@ namespace RMAC_Efficiency_Addin.Settings
         public bool WizardCompleted { get; set; } = false;
 
         // ---- Auto-update ----
-        public string UpdateUrl { get; set; } = "";
+        public string UpdateUrl { get; set; } = "https://raw.githubusercontent.com/Roy-RMAC/ff-updates/main/version.json";
         public DateTime LastUpdateCheck { get; set; } = DateTime.MinValue;
         public string? SkippedVersion { get; set; }
 

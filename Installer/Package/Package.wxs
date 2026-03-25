@@ -12,7 +12,7 @@
 
   <Package Name="RMAC Efficiency Addin"
            Manufacturer="RMAC Design"
-           Version="1.0.0.0"
+           Version="$(var.AddinVersion)"
            UpgradeCode="A72F8B3E-5D14-49C6-B8E1-7F3A2D6C9E45"
            Compressed="yes"
            InstallerVersion="500"

@@ -124,27 +124,21 @@ namespace RMAC_Efficiency_Addin.PartNumbering
             catch { }
         }
 
-        /// <summary>
-        /// Shows a completion state briefly before the form is disposed.
-        /// </summary>
-        public void SetComplete()
-        {
-            if (IsDisposed) return;
+        private bool _allowClose;
 
-            try
-            {
-                _lblOperation.Text = "Renumbering complete.";
-                _progressBar.Value = 100;
-                _lblPercentage.Text = "100%";
-                Application.DoEvents();
-            }
-            catch { }
+        /// <summary>
+        /// Closes the form programmatically (bypasses Alt+F4 guard).
+        /// </summary>
+        public void CloseAllowed()
+        {
+            _allowClose = true;
+            Close();
         }
 
-        // Prevent accidental close via Alt+F4
+        // Prevent accidental close via Alt+F4, but allow programmatic close
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            if (e.CloseReason == CloseReason.UserClosing)
+            if (!_allowClose && e.CloseReason == CloseReason.UserClosing)
             {
                 e.Cancel = true;
                 return;

@@ -68,6 +68,7 @@ namespace RMAC_Efficiency_Addin.UI
             RibbonHelpers.AddButtonSafe(panel, cmd.BtnHideSketchDims, false);
             RibbonHelpers.AddButtonSafe(panel, cmd.BtnHighlight, false);
             RibbonHelpers.AddButtonSafe(panel, cmd.BtnClearHighlight, false);
+            RibbonHelpers.AddButtonSafe(panel, cmd.BtnLegacySweep, false);
         }
 
         private void BuildOnTab(RibbonTab sheetMetalTab, RmacCommands cmd)
@@ -84,6 +85,7 @@ namespace RMAC_Efficiency_Addin.UI
             var pVis = EnsurePanel(sheetMetalTab, "Visibility", "RMAC_SheetMetal_Visibility_Sketch_Panel");
             RibbonHelpers.AddButtonSafe(pVis, cmd.BtnHideAllSketches, true);
             RibbonHelpers.AddButtonSafe(pVis, cmd.BtnShowAllSketches, false);
+            RibbonHelpers.AddButtonSafe(pVis, cmd.BtnLegacySweep, false);
 
             // Panel C: Tools - includes Thickness from Line
             var pTools = EnsurePanel(sheetMetalTab, "Tools", "RMAC_SheetMetal_Tools_Panel");

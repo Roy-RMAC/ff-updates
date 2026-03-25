@@ -38,11 +38,31 @@ namespace RMAC_Efficiency_Addin
 
             int updated = 0, skipped = 0;
 
-            // Prefer Structured view if available; fallback to first view.
+            // Enable Structured BOM view if not already (mirrors renumberer behaviour).
             var bom = topAssembly.ComponentDefinition.BOM;
+            try { bom.StructuredViewEnabled = true; } catch { }
+
             BOMView view;
             try { view = bom.BOMViews["Structured"]; }
-            catch { view = bom.BOMViews[1]; }
+            catch
+            {
+                try { view = bom.BOMViews[1]; }
+                catch
+                {
+                    MessageBox.Show(
+                        "Unable to access a BOM view.\n\nMake sure the assembly has been saved at least once.",
+                        "RMAC Comment Checker");
+                    return;
+                }
+            }
+
+            if (view.BOMRows.Count == 0)
+            {
+                MessageBox.Show(
+                    "The BOM view contains no rows.\n\nCheck that the assembly has components and the BOM Structured view is enabled.",
+                    "RMAC Comment Checker");
+                return;
+            }
 
             var originalDoc = app.ActiveDocument; // for restoring focus afterwards
 

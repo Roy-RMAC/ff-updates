@@ -12,7 +12,8 @@ namespace RMAC_Efficiency_Addin.Updates
     {
         private static readonly HttpClient _http = new()
         {
-            Timeout = TimeSpan.FromSeconds(15)
+            Timeout = TimeSpan.FromSeconds(15),
+            DefaultRequestHeaders = { { "User-Agent", "FabFlow-Updater" } }
         };
 
         private static readonly string UpdateDir = Path.Combine(

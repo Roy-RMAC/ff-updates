@@ -12,6 +12,9 @@ using RMAC_Efficiency_Addin.UI;
 using RMAC_Efficiency_Addin.DrawingDock;
 using RMAC_Efficiency_Addin.Settings;
 using RMAC_Efficiency_Addin.Updates;
+using RMAC_Efficiency_Addin.UI.Dialogs;
+using LicenseMgr = RMAC_Efficiency_Addin.Licensing.LicenseManager;
+using RMAC_Efficiency_Addin.Licensing;
 
 
 namespace RMAC_Efficiency_Addin
@@ -69,6 +72,27 @@ namespace RMAC_Efficiency_Addin
 
             // Load global settings (Dim mode, Debug, etc.)
             AddinSettings.Load();
+
+            // --- License gate (DISABLED for development) ---
+            // var licResult = LicenseMgr.CheckLicense();
+            //
+            // if (licResult.Status == LicenseStatus.NeedsActivation)
+            // {
+            //     using var dlg = new LicenseActivationDialog();
+            //     if (dlg.ShowDialog() != DialogResult.OK) return;
+            //     licResult = LicenseMgr.CheckLicense();
+            // }
+            //
+            // if (licResult.Status == LicenseStatus.Expired)
+            // {
+            //     using var dlg = new LicenseActivationDialog(expiredMessage: licResult.Message);
+            //     if (dlg.ShowDialog() != DialogResult.OK) return;
+            //     licResult = LicenseMgr.CheckLicense();
+            // }
+            //
+            // // If still not licensed after dialog, bail out
+            // if (licResult.Status != LicenseStatus.Licensed)
+            //     return;
 
             UiLog("RMAC addin activated (debug UI log enabled).", "Info");
 
@@ -966,6 +990,14 @@ namespace RMAC_Efficiency_Addin
             try { _recentPartsDock?.OnActivateDocument(); } catch { }
             try { _drawingDock?.OnActivateDocument(); } catch { }
             try { _ui?.RebuildRibbons(); } catch { }
+
+            // Prime the sketch environment so the first user-initiated sketch edit works correctly
+            try
+            {
+                if (DocumentObject is Inventor.PartDocument pd2)
+                    _sketchShowFormat?.PrimeIfNeeded(pd2);
+            }
+            catch { }
 
             // No per-sketch hold state: nothing to clear when switching documents
 

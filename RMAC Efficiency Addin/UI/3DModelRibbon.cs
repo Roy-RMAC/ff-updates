@@ -40,6 +40,7 @@ namespace RMAC_Efficiency_Addin.UI
                     var pVis = EnsurePanel(modelTab, "Visibility", "RMAC_3DModel_Visibility_Sketch_Panel");
                     RibbonHelpers.AddButtonSafe(pVis, cmd.BtnHideAllSketches, true);
                     RibbonHelpers.AddButtonSafe(pVis, cmd.BtnShowAllSketches, false);
+                    RibbonHelpers.AddButtonSafe(pVis, cmd.BtnLegacySweep, false);
 
                     // Panel C: Highlight
                     var pHi = EnsurePanel(modelTab, "Highlight", "RMAC_3DModel_Visibility_Highlight_Panel");

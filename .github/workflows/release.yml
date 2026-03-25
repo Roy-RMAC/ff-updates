@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dotnet tools (Obfuscar)
+        run: dotnet tool restore
+
+      - name: Download .NET 8 Desktop Runtime installer
+        # WiX Bundle needs this file at build time to read metadata.
+        # It is NOT embedded (Compressed="no") — downloaded at install time.
+        run: |
+          curl -L -o "Installer/Bundle/windowsdesktop-runtime-8.0-win-x64.exe" `
+            "https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe"
+        shell: pwsh
+
+      - name: Build solution (Installer config)
+        run: dotnet build "RMAC Efficiency Addin.sln" -c Installer
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v', ''
+          echo "version=$ver" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Find Setup.exe
+        id: find-setup
+        run: |
+          $exe = Get-ChildItem -Path "Installer/Bundle" -Recurse -Filter "*.exe" |
+            Where-Object { $_.Name -ne "windowsdesktop-runtime-8.0-win-x64.exe" } |
+            Select-Object -First 1
+          if (-not $exe) { throw "Setup.exe not found" }
+          echo "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          echo "Found: $($exe.FullName)"
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.find-setup.outputs.path }}
+          generate_release_notes: true
+          name: "v${{ steps.version.outputs.version }}"
+
+      - name: Update version.json on main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout main
+
+          $ver = "${{ steps.version.outputs.version }}"
+          $assetName = [System.IO.Path]::GetFileName("${{ steps.find-setup.outputs.path }}")
+          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/v${ver}/${assetName}"
+
+          $json = @{
+            version = $ver
+            downloadUrl = $downloadUrl
+            releaseNotes = "See release notes at https://github.com/${{ github.repository }}/releases/tag/v${ver}"
+          } | ConvertTo-Json
+
+          Set-Content -Path "version.json" -Value $json -Encoding UTF8
+
+          git add version.json
+          git commit -m "Update version.json to $ver [skip ci]"
+          git push origin main
+        shell: pwsh

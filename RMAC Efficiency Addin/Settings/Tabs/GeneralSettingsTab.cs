@@ -1,8 +1,10 @@
 // Settings/Tabs/GeneralSettingsTab.cs
 using RMAC_Efficiency_Addin.Settings;
+using RMAC_Efficiency_Addin.Updates;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Krypton.Navigator;
 using Krypton.Toolkit;
@@ -48,6 +50,7 @@ namespace RMAC_Efficiency_Addin.UI.Settings
         private readonly KryptonButton _btnNewFile = new() { Text = "New", AutoSize = false };
         private readonly KryptonButton _btnReset = new() { Text = "Reset Defaults", AutoSize = false };
         private readonly KryptonButton _btnWizard = new() { Text = "Setup Wizard", AutoSize = false };
+        private readonly KryptonButton _btnCheckUpdates = new() { Text = "Check for Updates", AutoSize = false };
 
         private readonly KryptonCheckBox _chkDebug = new()
         {
@@ -89,7 +92,8 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             int wOpen = TextRenderer.MeasureText(_btnOpenFile.Text, _btnOpenFile.Font).Width;
             int wReset = TextRenderer.MeasureText(_btnReset.Text, _btnReset.Font).Width;
             int wWizard = TextRenderer.MeasureText(_btnWizard.Text, _btnWizard.Font).Width;
-            int btnW = Math.Max(wWizard, Math.Max(wReset, Math.Max(wNew, wOpen))) + 32;
+            int wUpdate = TextRenderer.MeasureText(_btnCheckUpdates.Text, _btnCheckUpdates.Font).Width;
+            int btnW = Math.Max(wUpdate, Math.Max(wWizard, Math.Max(wReset, Math.Max(wNew, wOpen)))) + 32;
 
             int buttonColW = btnW + 24;
 
@@ -97,11 +101,13 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             _btnOpenFile.Height = fieldH;
             _btnReset.Height = fieldH;
             _btnWizard.Height = fieldH;
+            _btnCheckUpdates.Height = fieldH;
 
             _btnNewFile.Width = btnW;
             _btnOpenFile.Width = btnW;
             _btnReset.Width = btnW;
             _btnWizard.Width = btnW;
+            _btnCheckUpdates.Width = btnW;
 
             // Layout: explicit row indices
             var layout = new TableLayoutPanel
@@ -146,12 +152,14 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             _btnNewFile.Margin = new Padding(0, 0, 10, 0);
             _btnOpenFile.Margin = new Padding(0, 0, 10, 0);
             _btnReset.Margin = new Padding(0, 0, 10, 0);
-            _btnWizard.Margin = new Padding(0, 0, 0, 0);
+            _btnWizard.Margin = new Padding(0, 0, 10, 0);
+            _btnCheckUpdates.Margin = new Padding(0, 0, 0, 0);
 
             actions.Controls.Add(_btnNewFile);
             actions.Controls.Add(_btnOpenFile);
             actions.Controls.Add(_btnReset);
             actions.Controls.Add(_btnWizard);
+            actions.Controls.Add(_btnCheckUpdates);
 
             actions.Margin = new Padding(0, 3, 0, 3);
             layout.Controls.Add(actions, 1, 1);
@@ -214,6 +222,49 @@ namespace RMAC_Efficiency_Addin.UI.Settings
                     MessageBoxButtons.OK, MessageBoxIcon.Information)))();
 
             _btnWizard.Click += (_, __) => _runWizard?.Invoke();
+
+            _btnCheckUpdates.Click += async (_, __) =>
+            {
+                var url = AddinSettings.Current.UpdateUrl;
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    MessageBox.Show(Host.Owner,
+                        "No update URL configured.\n\nSet the UpdateUrl property in your settings.json file.",
+                        "Check for Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                _btnCheckUpdates.Enabled = false;
+                _btnCheckUpdates.Text = "Checking...";
+                try
+                {
+                    var update = await UpdateChecker.CheckForUpdateAsync(url);
+                    AddinSettings.Current.LastUpdateCheck = DateTime.UtcNow;
+                    AddinSettings.SaveWithResult();
+
+                    if (update == null)
+                    {
+                        MessageBox.Show(Host.Owner,
+                            "You're on the latest version.",
+                            "Check for Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
+
+                    using var dlg = new UpdateNotificationForm(update);
+                    dlg.ShowDialog(Host.Owner);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(Host.Owner,
+                        $"Update check failed:\n{ex.Message}",
+                        "Check for Updates", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                finally
+                {
+                    _btnCheckUpdates.Text = "Check for Updates";
+                    _btnCheckUpdates.Enabled = true;
+                }
+            };
 
             _btnReset.Click += (_, __) =>
             {

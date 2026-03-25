@@ -16,6 +16,5 @@ using System.Runtime.InteropServices;
 // The following GUID is for the ID of the typelib if this project is exposed to COM.
 [assembly: Guid("d0080830-2310-4783-89bd-a7e26bae95c4")]
 
-// Version information.
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+// Version information — populated from $(AddinVersion) in .csproj at build time.
+// Do NOT hardcode versions here; edit the <AddinVersion> property in the .csproj instead.

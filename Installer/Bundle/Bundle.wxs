@@ -17,7 +17,7 @@
 
   <Bundle Name="RMAC Efficiency Addin Setup"
           Manufacturer="RMAC Design"
-          Version="1.0.0.0"
+          Version="$(var.AddinVersion)"
           UpgradeCode="B83F9C4E-6E25-4AD7-C9F2-8A4B3E7D0F56">
 
     <BootstrapperApplication>
@@ -25,6 +25,14 @@
           LicenseUrl=""
           Theme="hyperlinkLicense" />
     </BootstrapperApplication>
+
+    <!-- Detect .NET 8 Desktop Runtime (x64) via shared-framework registration -->
+    <util:RegistrySearch
+        Variable="Net8DesktopFound"
+        Root="HKLM"
+        Key="SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.WindowsDesktop.App"
+        Value="8.0.0"
+        Result="exists" />
 
     <Chain>
 
@@ -37,8 +45,9 @@
            may depend on it).
            ========================================================== -->
       <ExePackage
-          Name="windowsdesktop-runtime-8.0-win-x64.exe"
+          SourceFile="windowsdesktop-runtime-8.0-win-x64.exe"
           DownloadUrl="https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe"
+          DetectCondition="Net8DesktopFound"
           InstallArguments="/install /quiet /norestart"
           RepairArguments="/repair /quiet /norestart"
           PerMachine="yes"
