@@ -141,10 +141,14 @@
 		<PackageReference Include="System.Management" Version="8.*" />
 	</ItemGroup>
 
-	<!-- Inventor interop reference -->
+	<!-- Inventor interop reference: prefer local install, fall back to lib/ for CI -->
+	<PropertyGroup>
+		<InventorInteropPath Condition="Exists('$(ProgramW6432)\Autodesk\Inventor 2025\Bin\Autodesk.Inventor.Interop.dll')">$(ProgramW6432)\Autodesk\Inventor 2025\Bin\Autodesk.Inventor.Interop.dll</InventorInteropPath>
+		<InventorInteropPath Condition="'$(InventorInteropPath)' == ''">$(MSBuildThisFileDirectory)..\lib\Autodesk.Inventor.Interop.dll</InventorInteropPath>
+	</PropertyGroup>
 	<ItemGroup>
 		<Reference Include="Autodesk.Inventor.Interop">
-			<HintPath>$(ProgramW6432)\Autodesk\Inventor 2025\Bin\Autodesk.Inventor.Interop.dll</HintPath>
+			<HintPath>$(InventorInteropPath)</HintPath>
 			<EmbedInteropTypes>False</EmbedInteropTypes>
 			<Private>True</Private>
 		</Reference>

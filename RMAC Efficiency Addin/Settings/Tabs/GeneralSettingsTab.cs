@@ -51,6 +51,7 @@ namespace RMAC_Efficiency_Addin.UI.Settings
         private readonly KryptonButton _btnReset = new() { Text = "Reset Defaults", AutoSize = false };
         private readonly KryptonButton _btnWizard = new() { Text = "Setup Wizard", AutoSize = false };
         private readonly KryptonButton _btnCheckUpdates = new() { Text = "Check for Updates", AutoSize = false };
+        private readonly KryptonButton _btnReportProblem = new() { Text = "Report a Problem", AutoSize = false };
 
         private readonly KryptonCheckBox _chkDebug = new()
         {
@@ -93,7 +94,8 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             int wReset = TextRenderer.MeasureText(_btnReset.Text, _btnReset.Font).Width;
             int wWizard = TextRenderer.MeasureText(_btnWizard.Text, _btnWizard.Font).Width;
             int wUpdate = TextRenderer.MeasureText(_btnCheckUpdates.Text, _btnCheckUpdates.Font).Width;
-            int btnW = Math.Max(wUpdate, Math.Max(wWizard, Math.Max(wReset, Math.Max(wNew, wOpen)))) + 32;
+            int wReport = TextRenderer.MeasureText(_btnReportProblem.Text, _btnReportProblem.Font).Width;
+            int btnW = Math.Max(wReport, Math.Max(wUpdate, Math.Max(wWizard, Math.Max(wReset, Math.Max(wNew, wOpen))))) + 32;
 
             int buttonColW = btnW + 24;
 
@@ -102,19 +104,21 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             _btnReset.Height = fieldH;
             _btnWizard.Height = fieldH;
             _btnCheckUpdates.Height = fieldH;
+            _btnReportProblem.Height = fieldH;
 
             _btnNewFile.Width = btnW;
             _btnOpenFile.Width = btnW;
             _btnReset.Width = btnW;
             _btnWizard.Width = btnW;
             _btnCheckUpdates.Width = btnW;
+            _btnReportProblem.Width = btnW;
 
             // Layout: explicit row indices
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 3,
-                RowCount = 5,
+                RowCount = 6,
                 Padding = new Padding(0),
                 Margin = new Padding(0)
             };
@@ -125,6 +129,7 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             // We keep the 3rd column but make it a 0px spacer to avoid any TableLayout surprises.
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 0));
 
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, rowH));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, rowH));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, rowH));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, rowH));
@@ -152,20 +157,38 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             _btnNewFile.Margin = new Padding(0, 0, 10, 0);
             _btnOpenFile.Margin = new Padding(0, 0, 10, 0);
             _btnReset.Margin = new Padding(0, 0, 10, 0);
-            _btnWizard.Margin = new Padding(0, 0, 10, 0);
-            _btnCheckUpdates.Margin = new Padding(0, 0, 0, 0);
+            _btnWizard.Margin = new Padding(0, 0, 0, 0);
 
             actions.Controls.Add(_btnNewFile);
             actions.Controls.Add(_btnOpenFile);
             actions.Controls.Add(_btnReset);
             actions.Controls.Add(_btnWizard);
-            actions.Controls.Add(_btnCheckUpdates);
 
             actions.Margin = new Padding(0, 3, 0, 3);
             layout.Controls.Add(actions, 1, 1);
 
-            // --- Row 2: Debug ---
-            layout.Controls.Add(MakeLabel("Debug"), 0, 2);
+            // --- Row 2: Support ---
+            layout.Controls.Add(MakeLabel("Support"), 0, 2);
+
+            var supportPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Margin = new Padding(0, 3, 0, 3),
+                Padding = new Padding(0)
+            };
+
+            _btnCheckUpdates.Margin = new Padding(0, 0, 10, 0);
+            _btnReportProblem.Margin = new Padding(0, 0, 0, 0);
+
+            supportPanel.Controls.Add(_btnCheckUpdates);
+            supportPanel.Controls.Add(_btnReportProblem);
+
+            layout.Controls.Add(supportPanel, 1, 2);
+
+            // --- Row 3: Debug ---
+            layout.Controls.Add(MakeLabel("Debug"), 0, 3);
 
             _chkDebug.Dock = DockStyle.Left;
             _chkDebug.Margin = new Padding(0, 0, 0, 0);
@@ -174,10 +197,10 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             _chkDebug.Location = new Point(0, (rowH - _chkDebug.Height) / 2);
             debugPanel.Controls.Add(_chkDebug);
 
-            layout.Controls.Add(debugPanel, 1, 2);
+            layout.Controls.Add(debugPanel, 1, 3);
 
-            // --- Row 3: Dimension policy ---
-            layout.Controls.Add(MakeLabel("Dimension policy"), 0, 3);
+            // --- Row 4: Dimension policy ---
+            layout.Controls.Add(MakeLabel("Dimension policy"), 0, 4);
 
             _cmbDimMode.Dock = DockStyle.Fill;
             _cmbDimMode.Margin = new Padding(0);
@@ -191,10 +214,10 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             };
             dimPanel.Controls.Add(_cmbDimMode);
 
-            layout.Controls.Add(dimPanel, 1, 3);
+            layout.Controls.Add(dimPanel, 1, 4);
 
-            // --- Row 4: Info fill ---
-            layout.Controls.Add(_txtInfo, 0, 4);
+            // --- Row 5: Info fill ---
+            layout.Controls.Add(_txtInfo, 0, 5);
             layout.SetColumnSpan(_txtInfo, 3);
 
             _txtInfo.Text =
@@ -222,6 +245,12 @@ namespace RMAC_Efficiency_Addin.UI.Settings
                     MessageBoxButtons.OK, MessageBoxIcon.Information)))();
 
             _btnWizard.Click += (_, __) => _runWizard?.Invoke();
+
+            _btnReportProblem.Click += (_, __) =>
+            {
+                using var dlg = new BugReportForm(Host.InventorApp);
+                dlg.ShowDialog(Host.Owner);
+            };
 
             _btnCheckUpdates.Click += async (_, __) =>
             {
