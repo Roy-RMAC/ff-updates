@@ -20,8 +20,16 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      # MSBuild from VS Build Tools — needed for COM references (stdole)
+      # dotnet build uses .NET Core MSBuild which doesn't support ResolveComReference
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
       - name: Restore dotnet tools (Obfuscar)
         run: dotnet tool restore
+
+      - name: Restore NuGet packages
+        run: dotnet restore "RMAC Efficiency Addin.sln"
 
       - name: Download .NET 8 Desktop Runtime installer
         # WiX Bundle needs this file at build time to read metadata.
@@ -32,7 +40,7 @@ jobs:
         shell: pwsh
 
       - name: Build solution (Installer config)
-        run: dotnet build "RMAC Efficiency Addin.sln" -c Installer
+        run: msbuild "RMAC Efficiency Addin.sln" -p:Configuration=Installer -restore:false
 
       - name: Extract version from tag
         id: version
