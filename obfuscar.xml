@@ -22,6 +22,9 @@
     <!-- Inventor loads via COM using this class GUID and ProgId -->
     <SkipType name="RMAC_Efficiency_Addin.StandardAddInServer" skipMethods="true" skipFields="true" skipProperties="true" skipEvents="true" />
 
+    <!-- Interface implemented by StandardAddInServer - must match skip rules -->
+    <SkipType name="RMAC_Efficiency_Addin.UI.IRmacCommandCallbacks" skipMethods="true" />
+
     <!-- === Preserve types referenced by Windows Forms designer === -->
     <!-- Forms use InitializeComponent which references types by name -->
     <SkipNamespace name="RMAC_Efficiency_Addin.Properties" />

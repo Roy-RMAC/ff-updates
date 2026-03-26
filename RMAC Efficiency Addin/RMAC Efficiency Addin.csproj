@@ -200,7 +200,7 @@
 		<Exec Command="dotnet tool restore" WorkingDirectory="$(MSBuildThisFileDirectory).." />
 
 		<Message Text="Obfuscating $(TargetFileName)..." Importance="high" />
-		<Exec Command="dotnet obfuscar obfuscar.xml" WorkingDirectory="$(MSBuildThisFileDirectory).." />
+		<Exec Command="dotnet obfuscar.console obfuscar.xml" WorkingDirectory="$(MSBuildThisFileDirectory).." />
 
 		<!-- Replace the original DLL with the obfuscated version -->
 		<Copy SourceFiles="$(MSBuildThisFileDirectory)..\InstallerBuild\Obfuscated\$(TargetFileName)"
