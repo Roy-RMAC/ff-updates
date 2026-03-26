@@ -28,9 +28,6 @@ jobs:
       - name: Restore dotnet tools (Obfuscar)
         run: dotnet tool restore
 
-      - name: Restore NuGet packages
-        run: dotnet restore "RMAC Efficiency Addin.sln"
-
       - name: Download .NET 8 Desktop Runtime installer
         # WiX Bundle needs this file at build time to read metadata.
         # It is NOT embedded (Compressed="no") — downloaded at install time.
@@ -40,7 +37,7 @@ jobs:
         shell: pwsh
 
       - name: Build solution (Installer config)
-        run: msbuild "RMAC Efficiency Addin.sln" -p:Configuration=Installer -restore:false
+        run: msbuild "RMAC Efficiency Addin.sln" -p:Configuration=Installer -restore
 
       - name: Extract version from tag
         id: version
