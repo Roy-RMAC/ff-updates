@@ -30,17 +30,25 @@
 
 		<!-- Inventor addin metadata -->
 		<AddinGuid>9889ec7f-aa24-4569-bd57-c5b0038466f5</AddinGuid>
-		<AddinDisplayName>RMAC Efficiency Addin</AddinDisplayName>
-		<AddinDescription>RMAC internal productivity tools.</AddinDescription>
-		<AddinFileName>Autodesk.RMAC Efficiency Addin.Inventor.addin</AddinFileName>
+		<AddinDisplayName>FabFlow Addin</AddinDisplayName>
+		<AddinDescription>FabFlow productivity tools for Autodesk Inventor.</AddinDescription>
+		<AddinFileName>FabFlow.addin</AddinFileName>
 
-		<!-- These were previously defined inside the Target; keep them at top-level -->
-		<InventorAddinsDir>$(APPDATA)\Autodesk\Inventor 2025\Addins</InventorAddinsDir>
-		<AddinFullPath>$(InventorAddinsDir)\$(AddinFileName)</AddinFullPath>
+		<!-- Debug deployment targets the Autodesk ApplicationPlugins bundle location
+		     (user scope, no admin required). This single location is scanned by all
+		     supported Inventor versions (2025, 2026, 2027), so one write covers the
+		     entire test matrix. Mirrors the MSI installer's bundle layout. -->
+		<FabFlowBundleDir>$(APPDATA)\Autodesk\ApplicationPlugins\FabFlow.bundle</FabFlowBundleDir>
+		<FabFlowBundleContentsDir>$(FabFlowBundleDir)\Contents</FabFlowBundleContentsDir>
+		<AddinFullPath>$(FabFlowBundleContentsDir)\$(AddinFileName)</AddinFullPath>
+		<PackageContentsSource>$(MSBuildThisFileDirectory)..\Installer\Package\PackageContents.xml</PackageContentsSource>
 		<AddinGuidUpper>$([System.String]::Copy('$(AddinGuid)').ToUpperInvariant())</AddinGuidUpper>
 	</PropertyGroup>
 
 	<!-- Debug configuration -->
+	<!-- Note: Debug defines TEST_HARNESS so the self-test runner is always available
+	     in dev builds. Release and Installer builds never define it, so customers
+	     never see test code. See Tests\RunOneVersion.bat for how the harness is triggered. -->
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
 		<BaseAddress>285212672</BaseAddress>
 		<ConfigurationOverrideFile></ConfigurationOverrideFile>
@@ -51,6 +59,7 @@
 		<RegisterForComInterop>false</RegisterForComInterop>
 		<RemoveIntegerChecks>false</RemoveIntegerChecks>
 		<CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+		<DefineConstants>$(DefineConstants);TEST_HARNESS</DefineConstants>
 
 		<!-- Debug output stays in your Deploy folder -->
 		<OutputPath>..\..\Deploy\</OutputPath>
@@ -170,10 +179,36 @@
 		</EmbeddedResource>
 	</ItemGroup>
 
-	<!-- Generate .addin file after build and copy it to the build output folder -->
-	<Target Name="GenerateAndDeployInventorAddin" AfterTargets="Build" Condition="'$(Configuration)' != 'Installer'">
-		<MakeDir Directories="$(InventorAddinsDir)" />
+	<!-- ============================================================================
+	     Deploy the add-in to Autodesk's shared ApplicationPlugins bundle location
+	     after every non-Installer build.
 
+	     Layout produced (in %APPDATA%\Autodesk\ApplicationPlugins\):
+	       FabFlow.bundle\
+	         PackageContents.xml     (copied from Installer\Package\)
+	         Contents\
+	           FabFlow.addin         (generated here, Assembly = absolute DLL path)
+
+	     The Assembly path points at $(TargetPath) in the Deploy folder, so the
+	     DLL doesn't need to be copied anywhere - Inventor loads it in-place on
+	     next startup. Rebuild → relaunch Inventor → latest code runs.
+
+	     One deployment covers Inventor 2025/2026/2027 since they all scan the
+	     ApplicationPlugins folder.
+	     ============================================================================ -->
+	<Target Name="DeployFabFlowBundle" AfterTargets="Build" Condition="'$(Configuration)' != 'Installer'">
+		<MakeDir Directories="$(FabFlowBundleDir);$(FabFlowBundleContentsDir)" />
+
+		<!-- Copy the canonical PackageContents.xml from the Installer project.
+		     Using the same file as the MSI ensures debug and release deployments
+		     declare the identical supported version range. -->
+		<Copy SourceFiles="$(PackageContentsSource)"
+		      DestinationFolder="$(FabFlowBundleDir)"
+		      SkipUnchangedFiles="true"
+		      OverwriteReadOnlyFiles="true" />
+
+		<!-- Generate FabFlow.addin pointing at the just-built DLL.
+		     Absolute Assembly path means we don't have to copy the DLL into the bundle. -->
 		<ItemGroup>
 			<AddinLines Include="&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot;?&gt;" />
 			<AddinLines Include="&lt;Addin Type=&quot;Standard&quot;&gt;" />
@@ -187,11 +222,9 @@
 			<AddinLines Include="&lt;/Addin&gt;" />
 		</ItemGroup>
 
-		<!-- Write to your local Inventor Addins folder (for your machine) -->
 		<WriteLinesToFile File="$(AddinFullPath)" Lines="@(AddinLines)" Overwrite="true" Encoding="UTF-8" />
 
-		<!-- ALSO copy the generated .addin next to the built DLL (Release share folder) -->
-		<Copy SourceFiles="$(AddinFullPath)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+		<Message Text="FabFlow bundle deployed to $(FabFlowBundleDir)" Importance="high" />
 	</Target>
 
 	<!-- Obfuscate the assembly after Installer builds (before WiX packaging) -->

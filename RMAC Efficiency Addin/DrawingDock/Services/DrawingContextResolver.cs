@@ -61,12 +61,22 @@ namespace RMAC_Efficiency_Addin.DrawingDock.Services
         }
 
         /// <summary>
-        /// Resolve current drawing context from Inventor.
-        /// If a view isn't explicitly selected, will try to infer it from selected objects.
+        /// Resolve current drawing context from Inventor, using the application's active document.
+        /// Thin shim over <see cref="GetContext(Document?)"/> for the common case.
         /// </summary>
         public DrawingContext GetContext()
         {
-            Document? activeDoc = TryGetActiveDocument();
+            return GetContext(TryGetActiveDocument());
+        }
+
+        /// <summary>
+        /// Resolve drawing context for the given document. Exposed as a separate overload so
+        /// tests and other callers can drive resolution without depending on
+        /// <c>Application.ActiveDocument</c>.
+        /// If a view isn't explicitly selected, tries to infer it from the document's selection set.
+        /// </summary>
+        public DrawingContext GetContext(Document? activeDoc)
+        {
             if (activeDoc == null)
             {
                 return Invalid("No active document.", activeDoc);
@@ -91,7 +101,7 @@ namespace RMAC_Efficiency_Addin.DrawingDock.Services
                 return Invalid("Drawing has no active sheet.", activeDoc, dwg);
 
             // Snapshot selection
-            var selectionItems = GetSelectionSnapshot();
+            var selectionItems = GetSelectionSnapshot(activeDoc);
 
             // Resolve selected view: prefer explicit active/selected view if you already track one,
             // otherwise infer from selection.
@@ -150,13 +160,13 @@ namespace RMAC_Efficiency_Addin.DrawingDock.Services
             catch { return null; }
         }
 
-        private IReadOnlyList<object> GetSelectionSnapshot()
+        private static IReadOnlyList<object> GetSelectionSnapshot(Document doc)
         {
             var list = new List<object>(8);
 
             try
             {
-                var ss = _app.ActiveDocument?.SelectSet;
+                var ss = doc?.SelectSet;
                 if (ss == null) return list;
 
                 // SelectSet is 1-based indexing

@@ -24,12 +24,47 @@ namespace RMAC_Efficiency_Addin
         }
 
         /// <summary>
-        /// New entry point: runs against the provided assembly (for dock pane "selected assembly" scenarios).
+        /// Public entry point. Runs the checker against a provided assembly and presents result
+        /// dialogs on completion. Production callers (ribbon, dock pane) use this overload.
         /// </summary>
         public static void Run(Inventor.Application app, AssemblyDocument topAssembly)
         {
             if (app == null) throw new ArgumentNullException(nameof(app));
             if (topAssembly == null) throw new ArgumentNullException(nameof(topAssembly));
+
+            var originalDoc = app.ActiveDocument; // for restoring focus afterwards
+
+            var result = RunCore(app, topAssembly);
+
+            // Return focus to original doc before any modal
+            try { originalDoc?.Activate(); } catch { }
+
+            // Present result
+            if (result.Errors.Count > 0)
+            {
+                MessageBox.Show(result.Errors[0], "RMAC Comment Checker");
+                return;
+            }
+
+            MessageBox.Show(
+                $"Completed.\n\nUpdated: {result.UpdatedCount}\nSkipped: {result.SkippedCount}",
+                "RMAC Comment Checker"
+            );
+        }
+
+        /// <summary>
+        /// Pure pipeline. Walks the BOM and applies comment checks. Returns a result object
+        /// describing what happened. No dialogs are shown from this method directly — but the
+        /// inner <c>PromptAndSet*</c> helpers will still open modal pickers if a row has an
+        /// invalid comment. Harness tests should use fixtures where every row already has a
+        /// valid comment so no prompts fire.
+        /// </summary>
+        public static CheckCommentsResult RunCore(Inventor.Application app, AssemblyDocument topAssembly)
+        {
+            if (app == null) throw new ArgumentNullException(nameof(app));
+            if (topAssembly == null) throw new ArgumentNullException(nameof(topAssembly));
+
+            var result = new CheckCommentsResult();
 
             // Unified config: read from AddinSettings (single global settings.json)
             AddinSettings.EnsureLoaded();
@@ -49,22 +84,16 @@ namespace RMAC_Efficiency_Addin
                 try { view = bom.BOMViews[1]; }
                 catch
                 {
-                    MessageBox.Show(
-                        "Unable to access a BOM view.\n\nMake sure the assembly has been saved at least once.",
-                        "RMAC Comment Checker");
-                    return;
+                    result.Errors.Add("Unable to access a BOM view.\n\nMake sure the assembly has been saved at least once.");
+                    return result;
                 }
             }
 
             if (view.BOMRows.Count == 0)
             {
-                MessageBox.Show(
-                    "The BOM view contains no rows.\n\nCheck that the assembly has components and the BOM Structured view is enabled.",
-                    "RMAC Comment Checker");
-                return;
+                result.Errors.Add("The BOM view contains no rows.\n\nCheck that the assembly has components and the BOM Structured view is enabled.");
+                return result;
             }
-
-            var originalDoc = app.ActiveDocument; // for restoring focus afterwards
 
             CheckRowsRecursive(
                 app,
@@ -75,13 +104,10 @@ namespace RMAC_Efficiency_Addin
                 ref skipped
             );
 
-            // Return focus to original
-            try { originalDoc?.Activate(); } catch { }
-
-            MessageBox.Show(
-                $"Completed.\n\nUpdated: {updated}\nSkipped: {skipped}",
-                "RMAC Comment Checker"
-            );
+            result.UpdatedCount = updated;
+            result.SkippedCount = skipped;
+            result.Success = true;
+            return result;
         }
 
         private static void CheckRowsRecursive(

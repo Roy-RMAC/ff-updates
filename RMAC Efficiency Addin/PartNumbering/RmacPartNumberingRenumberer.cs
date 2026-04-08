@@ -20,6 +20,11 @@ namespace RMAC_Efficiency_Addin
     /// </summary>
     internal static class RmacPartNumberingRenumberer
     {
+        /// <summary>
+        /// Public UI entry point. Validates the target, creates a progress dialog, delegates the
+        /// pipeline to <see cref="RunCore"/>, and presents the outcome as modal dialogs.
+        /// Production callers (ribbon button) use this overload.
+        /// </summary>
         public static void Run(Inventor.Application app, object? assemblyDocObj)
         {
             if (app == null) throw new ArgumentNullException(nameof(app));
@@ -30,8 +35,89 @@ namespace RMAC_Efficiency_Addin
                 return;
             }
 
+            var prevDoc = app.ActiveDocument;
+
+            RenumberProgressForm? progressForm = null;
+            try
+            {
+                progressForm = new RenumberProgressForm();
+                progressForm.Show();
+                progressForm.UpdateStatusText("Starting\u2026");
+            }
+            catch { progressForm = null; }
+
+            RenumberResult result;
+            try
+            {
+                result = RunCore(app, asmDoc, progressForm);
+            }
+            finally
+            {
+                try { progressForm?.CloseAllowed(); } catch { }
+                try { progressForm?.Dispose(); } catch { }
+            }
+
+            // Restore the previously-active document (typically the drawing) before any modal.
+            try { prevDoc?.Activate(); } catch { }
+
+            // ---- Present result ----
+            if (result.Errors.Count > 0)
+            {
+                MessageBox.Show(result.Errors[0], "Renumber - Error");
+                return;
+            }
+
+            if (result.Skipped)
+            {
+                string skipMsg = $"Renumber skipped (top-level assembly matched skip rule).\r\n\r\n{result.SkipReason}";
+                if (result.DebugMode && !string.IsNullOrWhiteSpace(result.LogPath))
+                    skipMsg += $"\r\n\r\nLog:\r\n{result.LogPath}";
+                MessageBox.Show(skipMsg);
+                return;
+            }
+
+            // Non-fatal: missing properties report (shown before the completion dialog)
+            if (!string.IsNullOrWhiteSpace(result.MissingPropertiesReport))
+            {
+                MessageBox.Show(result.MissingPropertiesReport,
+                    "Part Numbering - Missing Properties",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+
+            // Success dialog
+            if (result.DebugMode)
+            {
+                if (!string.IsNullOrWhiteSpace(result.LogPath))
+                    MessageBox.Show("RMAC Part numbering complete.\n\nLog:\n" + result.LogPath);
+                else
+                    MessageBox.Show("RMAC Part numbering complete.");
+            }
+            else
+            {
+                MessageBox.Show("Process Complete", "RMAC Part Numbering");
+            }
+        }
+
+        /// <summary>
+        /// Pure renumber pipeline. No dialogs — caller supplies a pre-validated assembly document
+        /// and optionally a progress form; receives a <see cref="RenumberResult"/> describing the
+        /// outcome. Still manages Inventor state (SilentOperation, UserInterfaceManager,
+        /// SuppressDockUpdates) since these are intrinsic to the pipeline.
+        /// </summary>
+        public static RenumberResult RunCore(
+            Inventor.Application app,
+            AssemblyDocument asmDoc,
+            RenumberProgressForm? progressForm = null)
+        {
+            if (app == null) throw new ArgumentNullException(nameof(app));
+            if (asmDoc == null) throw new ArgumentNullException(nameof(asmDoc));
+
+            var result = new RenumberResult();
+
             AddinSettings.EnsureLoaded();
             bool debug = AddinSettings.Current.Debug;
+            result.DebugMode = debug;
 
             // Choose scheme (must exist in RMAC_Efficiency_Addin.PartNumbering)
             IPartNumberingScheme scheme = AddinSettings.Current.PartNumberingMode switch
@@ -41,14 +127,11 @@ namespace RMAC_Efficiency_Addin
                 _ => new StructuredNumberingScheme(),
             };
 
-            var prevDoc = app.ActiveDocument;
-
             bool prevSilent = false;
             bool prevUI = false;
             bool uiSupported = false;
 
             RenumberingContext? ctx = null;
-            RenumberProgressForm? progressForm = null;
 
             try
             {
@@ -164,24 +247,24 @@ namespace RMAC_Efficiency_Addin
                 if (ctx.ShouldSkip(asmDoc, out skipReason))
                 {
                     ctx.Warn($"SKIP SUBTREE (top assembly): {ctx.SafeName(asmDoc)} | {skipReason}");
-                    if (debug && !string.IsNullOrWhiteSpace(ctx.LogPath))
-                        MessageBox.Show($"Renumber skipped (top-level assembly matched skip rule).\r\n\r\n{skipReason}\r\n\r\nLog:\r\n{ctx.LogPath}");
-                    else
-                        MessageBox.Show($"Renumber skipped (top-level assembly matched skip rule).\r\n\r\n{skipReason}");
-                    return;
+                    result.Skipped = true;
+                    result.SkipReason = skipReason;
+                    result.LogPath = ctx.LogPath;
+                    return result;
                 }
 
-                // --- Progress dialog ---
-                progressForm = new RenumberProgressForm();
-                progressForm.Show();
-                progressForm.UpdateStatusText("Counting BOM rows\u2026");
+                // --- Progress dialog wiring (form is created by the caller if at all) ---
+                try { progressForm?.UpdateStatusText("Counting BOM rows\u2026"); } catch { }
 
                 int totalRows = CountBomRowsRecursive(ctx, bomRows);
-                progressForm.SetTotalSteps(totalRows);
+                try { progressForm?.SetTotalSteps(totalRows); } catch { }
 
-                // Wire context -> progress form
-                ctx.OnProgress = (step, text) => progressForm.UpdateProgress(step, text);
-                ctx.OnStatusText = (text) => progressForm.UpdateStatusText(text);
+                // Wire context -> progress form (null-safe)
+                if (progressForm != null)
+                {
+                    ctx.OnProgress = (step, text) => progressForm.UpdateProgress(step, text);
+                    ctx.OnStatusText = (text) => progressForm.UpdateStatusText(text);
+                }
 
                 // Suppress dock panel visibility updates during ScreenUpdating toggle
                 Exporting.GlobalExporter.SuppressDockUpdates = true;
@@ -219,12 +302,12 @@ namespace RMAC_Efficiency_Addin
                     ctx.Info("RMAC Part numbering complete");
                 });
 
-                // Report missing template tokens (if any)
+                // Capture missing template tokens report (if any) into result; caller decides how to present it
                 try
                 {
                     var report = ctx.BuildMissingPropertiesReport();
                     if (!string.IsNullOrWhiteSpace(report))
-                        MessageBox.Show(report, "Part Numbering - Missing Properties", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        result.MissingPropertiesReport = report;
                 }
                 catch { }
 
@@ -232,37 +315,17 @@ namespace RMAC_Efficiency_Addin
                 try { progressForm?.UpdateStatusText("Refreshing drawings\u2026"); } catch { }
                 try { RefreshOpenDrawingsReferencingAssembly(app, asmDoc, debug, ctx); } catch { }
 
-                // Close progress dialog before showing completion message
-                try { progressForm?.CloseAllowed(); } catch { }
-                try { progressForm?.Dispose(); } catch { }
-                progressForm = null; // prevent double-close in finally
-
-                // Navigate back to the previous document (drawing) before showing completion
-                try { prevDoc?.Activate(); } catch { }
-
-                // Completion UI
-                if (debug)
-                {
-                    if (!string.IsNullOrWhiteSpace(ctx.LogPath))
-                        MessageBox.Show("RMAC Part numbering complete.\n\nLog:\n" + ctx.LogPath);
-                    else
-                        MessageBox.Show("RMAC Part numbering complete.");
-                }
-                else
-                {
-                    MessageBox.Show("Process Complete", "RMAC Part Numbering");
-                }
+                result.LogPath = ctx.LogPath;
+                result.Success = true;
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Renumber - Error");
+                result.Errors.Add(ex.Message);
+                if (ctx != null && result.LogPath == null)
+                    result.LogPath = ctx.LogPath;
             }
             finally
             {
-                // Close progress dialog (if not already closed in success path)
-                try { progressForm?.CloseAllowed(); } catch { }
-                try { progressForm?.Dispose(); } catch { }
-
                 // Ensure renumber log is closed/flushed (no-op if Debug is off)
                 try { ctx?.LogClose(); } catch { }
 
@@ -273,13 +336,12 @@ namespace RMAC_Efficiency_Addin
                     try { app.UserInterfaceManager.UserInteractionDisabled = prevUI; } catch { }
                 }
 
-                // Navigate back (safe if already activated in success path)
-                try { prevDoc?.Activate(); } catch { }
-
                 // Clear suppression AFTER ScreenUpdating is restored so any
                 // queued OnActivateDocument events fired during restoration are still suppressed.
                 Exporting.GlobalExporter.SuppressDockUpdates = false;
             }
+
+            return result;
         }
 
         // -----------------------------
@@ -554,7 +616,7 @@ namespace RMAC_Efficiency_Addin
             }
         }
 
-        private static void MapSkipSelection(string selection, out string setName, out string propName)
+        internal static void MapSkipSelection(string selection, out string setName, out string propName)
         {
             setName = string.Empty;
             propName = string.Empty;

@@ -4,12 +4,12 @@ using System.Runtime.InteropServices;
 // Assembly information is explicitly defined here because the project disables
 // auto-generated assembly info (<GenerateAssemblyInfo>false</GenerateAssemblyInfo>).
 
-[assembly: AssemblyTitle("RMAC Efficiency Addin")]
-[assembly: AssemblyDescription("RMAC internal productivity tools for Autodesk Inventor.")]
+[assembly: AssemblyTitle("FabFlow Addin")]
+[assembly: AssemblyDescription("FabFlow productivity tools for Autodesk Inventor.")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("RMAC Design")]
-[assembly: AssemblyProduct("RMAC Efficiency Addin")]
-[assembly: AssemblyCopyright("Copyright © 2026 RMAC Design")]
+[assembly: AssemblyCompany("FabFlow")]
+[assembly: AssemblyProduct("FabFlow Addin")]
+[assembly: AssemblyCopyright("Copyright © 2026 FabFlow")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

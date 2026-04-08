@@ -1,6 +1,7 @@
 ﻿using Inventor;
 using System;
 using RMAC_Efficiency_Addin.Infrastructure;
+using RMAC_Efficiency_Addin.Layouts;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -26,6 +27,11 @@ namespace RMAC_Efficiency_Addin
     /// </summary>
     public sealed class LayoutsController : IAddinController
     {
+        // Test-accessibility hook. Set in Start(), cleared in Stop()/Dispose().
+        // The self-test harness uses this to call internal command methods directly,
+        // bypassing the dock UI state. Production code should never depend on this.
+        public static LayoutsController? Instance { get; private set; }
+
         private bool _started;
 
         public bool IsStarted => _started;
@@ -43,6 +49,7 @@ namespace RMAC_Efficiency_Addin
         private Button? _btnRemove;
         private Button? _btnDerive;
         private Button? _btnCustomDerive;
+        private Button? _btnEditDerive;
         private volatile bool _mtFinishRequested;
         private volatile bool _mtCancelRequested;
 
@@ -65,6 +72,7 @@ EnsureDockCreated();
             UpdateOnActivation();
 
             _started = true;
+            Instance = this;
 }
         public void Stop()
         {
@@ -85,10 +93,12 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             _btnRemove = null;
             _btnDerive = null;
             _btnCustomDerive = null;
+            _btnEditDerive = null;
 
             _activeIpjPath = null;
 
             _started = false;
+            if (ReferenceEquals(Instance, this)) Instance = null;
 }
 
         public void OnActivateDocument() => UpdateOnActivation();
@@ -142,7 +152,7 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 5,
+                RowCount = 6,
                 BackColor = bg
             };
 
@@ -150,6 +160,7 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300)); // derive parts
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));  // bottom buttons
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200)); // derived-in-active FIXED
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));  // edit derive button
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // filler absorbs remainder
 
             // --- TOP Buttons (Add / Remove) ---
@@ -280,13 +291,36 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             grpDerivedNow.Controls.Add(derivedFrame);
             derivedArea.Controls.Add(grpDerivedNow);
 
+            // --- Edit Derive button strip ---
+            var editDeriveStrip = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = bg
+            };
+
+            _btnEditDerive = MakeButton("EDIT DERIVE", 190, border, text);
+            _btnEditDerive.Left = 0;
+            _btnEditDerive.Top = 6;
+            _btnEditDerive.Enabled = false;
+
+            _btnEditDerive.Click += (s, e) =>
+            {
+                try { EditDeriveSelected(); }
+                catch (Exception ex) { MessageBox.Show(ex.Message, "RMAC Layouts - Edit Derive"); }
+            };
+
+            editDeriveStrip.Controls.Add(_btnEditDerive);
+
+            _derivedInActiveList.SelectedIndexChanged += (s, e) => UpdateEditDeriveEnabled();
+
             // --- Assemble layout ---
             layout.Controls.Add(topButtonStrip, 0, 0);
             layout.Controls.Add(grpDerive, 0, 1);
             layout.Controls.Add(bottomButtonStrip, 0, 2);
             layout.Controls.Add(derivedArea, 0, 3);
+            layout.Controls.Add(editDeriveStrip, 0, 4);
 
-            // filler row (row 4) intentionally left empty
+            // filler row (row 5) intentionally left empty
 
             root.Controls.Add(layout);
             return root;
@@ -541,7 +575,7 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                 return;
             }
 
-            if (IsAlreadyDerived(targetPart, sourcePath))
+            if (CustomDeriveCore.IsAlreadyDerived(targetPart, sourcePath))
             {
                 MessageBox.Show("That part is already derived into the active part.");
                 return;
@@ -558,7 +592,7 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                 _app.ScreenUpdating = false;
                 tx = _app.TransactionManager.StartTransaction((Inventor._Document)_app.ActiveDocument, "RMAC Derive Part");
 
-                AddDerivedPart(targetPart, sourcePath);
+                CustomDeriveCore.AddFullDerive(targetPart, sourcePath);
 
                 // Ensure derived objects are instantiated before we enumerate sketches
                 try { targetPart.Update(); } catch { }
@@ -583,6 +617,8 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             RefreshDerivedInActivePartList();
         }
 
+        // Thin UI wrapper — what the ribbon button still calls. Reads UI state, validates,
+        // delegates the real work to RunCustomDerive (which is internal so tests can call it).
         private void CustomDeriveSelectedIntoActivePart()
         {
             if (_deriveList == null) return;
@@ -599,21 +635,37 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                 return;
             }
 
+            try
+            {
+                RunCustomDerive(targetPart, selected.FilePath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "RMAC Layouts - Custom Derive");
+            }
+        }
+
+        /// <summary>
+        /// Run the custom derive command against an explicit target and source. Opens (or
+        /// activates) the source part, runs the interactive selection session, and adds the
+        /// resulting derived component to the target. Throws on validation failures and on
+        /// "no items selected" so callers (production wrapper or tests) can decide how to
+        /// present the error.
+        /// </summary>
+        internal void RunCustomDerive(PartDocument targetPart, string sourceFullPath)
+        {
+            if (targetPart == null) throw new ArgumentNullException(nameof(targetPart));
+            if (string.IsNullOrWhiteSpace(sourceFullPath))
+                throw new ArgumentException("Source path is required.", nameof(sourceFullPath));
+
             if (IsSketchEditActive())
                 throw new InvalidOperationException("Please exit sketch edit mode before deriving.");
 
-            var sourcePath = selected.FilePath;
-            if (string.IsNullOrWhiteSpace(sourcePath) || !IOFile.Exists(sourcePath))
-            {
-                MessageBox.Show("Source file does not exist:\n" + sourcePath);
-                return;
-            }
+            if (!IOFile.Exists(sourceFullPath))
+                throw new InvalidOperationException("Source file does not exist:\n" + sourceFullPath);
 
-            if (IsAlreadyDerived(targetPart, sourcePath))
-            {
-                MessageBox.Show("That part is already derived into the active part.");
-                return;
-            }
+            if (CustomDeriveCore.IsAlreadyDerived(targetPart, sourceFullPath))
+                throw new InvalidOperationException("That part is already derived into the active part.");
 
             bool openedHere = false;
             Inventor._Document? openedDoc = null;
@@ -627,17 +679,17 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                 try { ((Inventor._Document)_app.ActiveDocument).SelectSet.Clear(); } catch { }
                 try { _app.CommandManager.StopActiveCommand(); } catch { }
 
-                openedDoc = FindOpenDocumentByPath(sourcePath);
+                openedDoc = FindOpenDocumentByPath(sourceFullPath);
                 if (openedDoc != null)
                 {
                     sourcePart = openedDoc as PartDocument;
 
-                    // If it’s open but activation fails, force a close/reopen (fixes “won’t switch window”)
+                    // If it's open but activation fails, force a close/reopen (fixes "won't switch window")
                     if (sourcePart != null)
                     {
                         if (!ForceActivateDocument((Inventor._Document)sourcePart))
                         {
-                            var reopened = ForceReopenVisiblePart(sourcePath);
+                            var reopened = ForceReopenVisiblePart(sourceFullPath);
                             if (reopened == null)
                                 throw new InvalidOperationException("Failed to reopen the source layout part.");
 
@@ -653,7 +705,7 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                 else
                 {
                     // Not open -> open visible
-                    openedDoc = _app.Documents.Open(sourcePath, true);
+                    openedDoc = _app.Documents.Open(sourceFullPath, true);
                     openedHere = true;
                     sourcePart = openedDoc as PartDocument;
                 }
@@ -667,13 +719,11 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                 var selectedEntityIds = RunSelectionSession(sourcePart);
 
                 if (selectedEntityIds.Count == 0)
-                {
-                    MessageBox.Show("No items were selected. Nothing was derived.");
-                    return;
-                }
+                    throw new InvalidOperationException("No items were selected. Nothing was derived.");
 
                 // Return to target and close the source doc if we opened it here.
                 EndBrowserSafeSourceSession_NoWindowHandle(targetPart, openedHere, openedDoc);
+                openedHere = false; // EndBrowserSafeSourceSession may have closed it; prevent double-close in finally
 
                 // Snapshot BEFORE derive so we can style only newly created sketches (no polling)
                 var before = SnapshotSketchIUnknowns(targetPart);
@@ -681,7 +731,7 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                 _app.ScreenUpdating = false;
                 tx = _app.TransactionManager.StartTransaction((Inventor._Document)targetPart, "RMAC Custom Derive");
 
-                AddDerivedComponentAndRefresh(targetPart, sourcePart, sourcePath, selectedEntityIds);
+                AddDerivedComponentAndRefresh(targetPart, sourcePart, sourceFullPath, selectedEntityIds);
 
                 // Ensure derived objects are instantiated before we enumerate sketches
                 try { targetPart.Update(); } catch { }
@@ -693,10 +743,10 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                 tx.End();
                 tx = null;
             }
-            catch (Exception ex)
+            catch
             {
                 try { tx?.Abort(); } catch { }
-                MessageBox.Show(ex.Message, "RMAC Layouts - Custom Derive");
+                throw;
             }
             finally
             {
@@ -710,6 +760,157 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                     try { openedDoc.Close(false); } catch { }
                 }
             }
+        }
+
+        // ============================================================
+        // EDIT DERIVE
+        // ============================================================
+
+        // Thin UI wrapper — what the ribbon button still calls.
+        private void EditDeriveSelected()
+        {
+            if (_derivedInActiveList?.SelectedItem is not DerivedSourceItem selected)
+            {
+                MessageBox.Show("Select a derived source in the list first.");
+                return;
+            }
+
+            if (_app.ActiveDocument is not PartDocument targetPart)
+            {
+                MessageBox.Show("Open a Part document first.");
+                return;
+            }
+
+            try
+            {
+                RunEditDerive(targetPart, selected.SourceFullPath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "RMAC Layouts - Edit Derive");
+            }
+        }
+
+        /// <summary>
+        /// Run the edit-derive command against an explicit target and source. Finds the
+        /// existing DerivedPartComponent for that source, opens (or activates) the source,
+        /// runs the interactive selection session pre-populated with the currently-included
+        /// entities, then deletes the old DPC and recreates it with the new selection.
+        /// Throws on validation failures and on "no items selected".
+        /// </summary>
+        internal void RunEditDerive(PartDocument targetPart, string sourceFullPath)
+        {
+            if (targetPart == null) throw new ArgumentNullException(nameof(targetPart));
+            if (string.IsNullOrWhiteSpace(sourceFullPath))
+                throw new ArgumentException("Source path is required.", nameof(sourceFullPath));
+
+            if (IsSketchEditActive())
+                throw new InvalidOperationException("Please exit sketch edit mode before editing a derive.");
+
+            if (!IOFile.Exists(sourceFullPath))
+                throw new InvalidOperationException("Source file does not exist:\n" + sourceFullPath);
+
+            // Find the existing DerivedPartComponent for this source
+            dynamic? existingDpc = CustomDeriveCore.FindDerivedPartComponent(targetPart, sourceFullPath);
+            if (existingDpc == null)
+                throw new InvalidOperationException("Could not find the derived component for this source.");
+
+            bool openedHere = false;
+            Inventor._Document? openedDoc = null;
+            PartDocument? sourcePart = null;
+
+            Transaction? tx = null;
+            bool oldSU = _app.ScreenUpdating;
+
+            try
+            {
+                try { ((Inventor._Document)_app.ActiveDocument).SelectSet.Clear(); } catch { }
+                try { _app.CommandManager.StopActiveCommand(); } catch { }
+
+                // Open / activate source part (same pattern as Custom Derive)
+                openedDoc = FindOpenDocumentByPath(sourceFullPath);
+                if (openedDoc != null)
+                {
+                    sourcePart = openedDoc as PartDocument;
+                    if (sourcePart != null)
+                    {
+                        if (!ForceActivateDocument((Inventor._Document)sourcePart))
+                        {
+                            var reopened = ForceReopenVisiblePart(sourceFullPath);
+                            if (reopened == null)
+                                throw new InvalidOperationException("Failed to reopen the source layout part.");
+                            openedDoc = reopened;
+                            sourcePart = reopened as PartDocument;
+                            openedHere = true;
+                            if (sourcePart == null)
+                                throw new InvalidOperationException("Reopened source is not a Part document.");
+                        }
+                    }
+                }
+                else
+                {
+                    openedDoc = _app.Documents.Open(sourceFullPath, true);
+                    openedHere = true;
+                    sourcePart = openedDoc as PartDocument;
+                }
+
+                if (sourcePart == null)
+                    throw new InvalidOperationException("Selected source is not a Part document.");
+
+                // Read which entities are currently included in the derive definition
+                var currentlyIncluded = CustomDeriveCore.ReadIncludedEntityIds(existingDpc, (Inventor._Document)sourcePart);
+
+                // Activate source for selection
+                BeginBrowserSafeSourceSession(sourcePart);
+
+                // Run selection session with current entities pre-highlighted
+                var selectedEntityIds = RunSelectionSession(sourcePart, currentlyIncluded);
+
+                if (selectedEntityIds.Count == 0)
+                    throw new InvalidOperationException("No items were selected. Derive was not modified.");
+
+                // Return to target
+                EndBrowserSafeSourceSession_NoWindowHandle(targetPart, openedHere, openedDoc);
+                openedHere = false; // prevent double-close in finally
+
+                // Snapshot BEFORE edit so we can style only newly created sketches
+                var before = SnapshotSketchIUnknowns(targetPart);
+
+                _app.ScreenUpdating = false;
+                tx = _app.TransactionManager.StartTransaction((Inventor._Document)targetPart, "RMAC Edit Derive");
+
+                // Inventor's API doesn't reliably propagate in-place changes to an existing
+                // DerivedPartComponent definition. ReplaceCustomDerive deletes and recreates.
+                CustomDeriveCore.ReplaceCustomDerive(targetPart, sourceFullPath, (Inventor._Document)sourcePart, selectedEntityIds);
+
+                // Force update to propagate changes
+                try { targetPart.Update(); } catch { }
+                try { ((Inventor._Document)targetPart).Update(); } catch { }
+
+                // Apply inactive overrides to any newly derived sketches
+                ApplyInactiveToNewSketches(targetPart, before);
+
+                tx.End();
+                tx = null;
+            }
+            catch
+            {
+                try { tx?.Abort(); } catch { }
+                throw;
+            }
+            finally
+            {
+                _app.ScreenUpdating = oldSU;
+                try { _app.ActiveView.Update(); } catch { }
+                try { targetPart.Activate(); } catch { }
+
+                if (openedHere && openedDoc != null)
+                {
+                    try { openedDoc.Close(false); } catch { }
+                }
+            }
+
+            RefreshDerivedInActivePartList();
         }
 
         /// <summary>
@@ -760,12 +961,7 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             string sourceFullPath,
             HashSet<string> selectedEntityIds)
         {
-            dynamic dpcs = targetPart.ComponentDefinition.ReferenceComponents.DerivedPartComponents;
-            dynamic def = dpcs.CreateDefinition(sourceFullPath);
-
-            ConfigureDerivedDefinitionBySelection_Strict(def, (Inventor._Document)sourcePart, selectedEntityIds);
-
-            dpcs.Add(def);
+            CustomDeriveCore.AddCustomDerive(targetPart, sourceFullPath, (Inventor._Document)sourcePart, selectedEntityIds);
 
             // Force rebuild so derived descriptors populate
             try { targetPart.Update(); } catch { }
@@ -775,10 +971,57 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             RefreshDerivedInActivePartList();
         }
 
-        private HashSet<string> RunSelectionSession(PartDocument sourcePart)
+        private HashSet<string> RunSelectionSession(PartDocument sourcePart,
+            HashSet<string>? preSelectedIds = null)
         {
             var selectedEntityIds = new HashSet<string>(StringComparer.Ordinal);
             var idToObj = new Dictionary<string, object>(StringComparer.Ordinal);
+
+            // Pre-populate with already-included entities (for Edit Derive)
+            if (preSelectedIds != null && preSelectedIds.Count > 0)
+            {
+                var srcDoc = (Inventor._Document)sourcePart;
+                var cd = sourcePart.ComponentDefinition;
+
+                foreach (object o in cd.Sketches)
+                {
+                    if (o is PlanarSketch ps)
+                    {
+                        string id = CustomDeriveCore.GetEntityId(srcDoc, ps);
+                        if (preSelectedIds.Contains(id))
+                        {
+                            selectedEntityIds.Add(id);
+                            idToObj[id] = ps;
+                        }
+                    }
+                }
+
+                foreach (object o in cd.Sketches3D)
+                {
+                    if (o is Sketch3D s3)
+                    {
+                        string id = CustomDeriveCore.GetEntityId(srcDoc, s3);
+                        if (preSelectedIds.Contains(id))
+                        {
+                            selectedEntityIds.Add(id);
+                            idToObj[id] = s3;
+                        }
+                    }
+                }
+
+                foreach (object o in cd.WorkPlanes)
+                {
+                    if (o is WorkPlane wp)
+                    {
+                        string id = CustomDeriveCore.GetEntityId(srcDoc, wp);
+                        if (preSelectedIds.Contains(id))
+                        {
+                            selectedEntityIds.Add(id);
+                            idToObj[id] = wp;
+                        }
+                    }
+                }
+            }
 
             bool done = false;
             bool cancelled = false;
@@ -899,6 +1142,30 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                 }
                 catch { }
 
+                // Pre-populate highlight set for Edit Derive (show already-included entities)
+                if (idToObj.Count > 0)
+                {
+                    try
+                    {
+                        hs = doc.CreateHighlightSet();
+                        hs.Clear();
+                        try { hs.Color = _app.TransientObjects.CreateColor(255, 0, 255); } catch { }
+                        foreach (var obj in idToObj.Values)
+                        {
+                            try { hs.AddItem(obj); } catch { }
+                        }
+                    }
+                    catch { hs = null; }
+
+                    if (mtCountLabel != null)
+                    {
+                        try { mtCountLabel.DisplayName = $"Selected: {selectedEntityIds.Count}"; }
+                        catch { try { mtCountLabel.Text = $"Selected: {selectedEntityIds.Count}"; } catch { } }
+                    }
+
+                    try { _app.StatusBarText = $"Selected: {selectedEntityIds.Count} (Ctrl-click to de-select)"; } catch { }
+                }
+
                 bool highlightDirty = false;
 
                 var deadline = DateTime.UtcNow.AddMinutes(5);
@@ -975,6 +1242,7 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                             {
                                 hs = doc.CreateHighlightSet();
                                 hs.Clear();
+                                try { hs.Color = _app.TransientObjects.CreateColor(255, 0, 255); } catch { }
                             }
                             catch { hs = null; }
                         }
@@ -994,7 +1262,7 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                             if (!TryResolveSelectableEntity(raw, out object entityObj))
                                 continue;
 
-                            string id = GetEntityId(doc, entityObj);
+                            string id = CustomDeriveCore.GetEntityId(doc, entityObj);
 
                             if (ctrlDown && selectedEntityIds.Contains(id))
                             {
@@ -1191,110 +1459,6 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
 
         
 
-        private static string GetEntityId(Inventor._Document doc, object obj)
-        {
-            string rk = GetReferenceKeyBase64(doc, obj);
-            if (!string.IsNullOrWhiteSpace(rk))
-                return "RK:" + rk;
-
-            try
-            {
-                dynamic d = obj;
-                string internalName = "";
-                try { internalName = (string)d.InternalName; } catch { internalName = ""; }
-
-                if (!string.IsNullOrWhiteSpace(internalName))
-                    return "IN:" + internalName;
-            }
-            catch { }
-
-            try
-            {
-                dynamic d = obj;
-                string name = "";
-                try { name = (string)d.Name; } catch { name = ""; }
-
-                string typeName = obj.GetType().FullName ?? obj.GetType().Name;
-                return "NM:" + typeName + ":" + name;
-            }
-            catch
-            {
-                return "OBJ:" + (obj.GetType().FullName ?? obj.GetType().Name);
-            }
-        }
-
-        private static string GetReferenceKeyBase64(Inventor._Document doc, object inventorObject)
-        {
-            if (doc == null || inventorObject == null) return "";
-
-            try
-            {
-                var t = inventorObject.GetType();
-                var methods = t.GetMethods().Where(m => m.Name == "GetReferenceKey").ToArray();
-                if (methods.Length == 0) return "";
-
-                foreach (var m in methods)
-                {
-                    var ps = m.GetParameters();
-                    if (ps.Length < 1) continue;
-
-                    bool firstIsByRefByteArray = ps[0].ParameterType == typeof(byte[]).MakeByRefType();
-                    if (!firstIsByRefByteArray) continue;
-
-                    object[] args = (ps.Length == 1)
-                        ? new object[] { Array.Empty<byte>() }
-                        : new object[] { Array.Empty<byte>(), 0L };
-
-                    m.Invoke(inventorObject, args);
-
-                    var key = args[0] as byte[];
-                    if (key != null && key.Length > 0)
-                        return Convert.ToBase64String(key);
-                }
-            }
-            catch { }
-
-            return "";
-        }
-
-        private static bool IsAlreadyDerived(PartDocument targetPart, string sourceFullPath)
-        {
-            try
-            {
-                dynamic dpcs = targetPart.ComponentDefinition.ReferenceComponents.DerivedPartComponents;
-
-                foreach (object obj in dpcs)
-                {
-                    try
-                    {
-                        dynamic dpc = obj;
-                        string? existing = null;
-
-                        try { existing = (string?)dpc.ReferencedDocumentDescriptor?.FullDocumentName; } catch { }
-
-                        if (string.IsNullOrWhiteSpace(existing)) continue;
-
-                        if (string.Equals(
-                                IOPath.GetFullPath(existing),
-                                IOPath.GetFullPath(sourceFullPath),
-                                StringComparison.OrdinalIgnoreCase))
-                            return true;
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-
-            return false;
-        }
-
-        private static void AddDerivedPart(PartDocument targetPart, string sourceFullPath)
-        {
-            dynamic dpcs = targetPart.ComponentDefinition.ReferenceComponents.DerivedPartComponents;
-            dynamic def = dpcs.CreateDefinition(sourceFullPath);
-            dpcs.Add(def);
-        }
-
         private void RefreshDerivedInActivePartList()
         {
             if (_derivedInActiveList == null) return;
@@ -1303,10 +1467,11 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             {
                 _derivedInActiveList.Items.Clear();
                 _derivedInActiveList.Items.Add("(None)");
+                UpdateEditDeriveEnabled();
                 return;
             }
 
-            var items = new List<string>();
+            var items = new List<DerivedSourceItem>();
 
             try
             {
@@ -1325,21 +1490,24 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
                             continue;
 
                         string pn = ReadPartNumber(full);
+                        string display = !string.IsNullOrWhiteSpace(pn)
+                            ? pn.Trim()
+                            : IOPath.GetFileNameWithoutExtension(full);
 
-                        if (!string.IsNullOrWhiteSpace(pn))
-                            items.Add(pn.Trim());
-                        else
-                            items.Add(IOPath.GetFileNameWithoutExtension(full));
+                        // Avoid duplicate display names (same source derived multiple times)
+                        if (items.Any(i => string.Equals(i.SourceFullPath, full, StringComparison.OrdinalIgnoreCase)))
+                            continue;
+
+                        items.Add(new DerivedSourceItem
+                        {
+                            DisplayName = display,
+                            SourceFullPath = full!
+                        });
                     }
                     catch { }
                 }
             }
             catch { }
-
-            items = items
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
 
             _derivedInActiveList.BeginUpdate();
             try
@@ -1355,6 +1523,14 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             {
                 _derivedInActiveList.EndUpdate();
             }
+
+            UpdateEditDeriveEnabled();
+        }
+
+        private void UpdateEditDeriveEnabled()
+        {
+            if (_btnEditDerive == null) return;
+            _btnEditDerive.Enabled = _derivedInActiveList?.SelectedItem is DerivedSourceItem;
         }
 
         private string ReadPartNumber(string fullPath)
@@ -1418,125 +1594,6 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             return null;
         }
 
-
-        // --- Strict COM-based derive filtering (Sketches / Sketches3D / WorkFeatures only) ---
-
-        private static void ConfigureDerivedDefinitionBySelection_Strict(
-            dynamic def,
-            Inventor._Document sourceDoc,
-            HashSet<string> selectedEntityIds)
-        {
-            if (def == null) return;
-
-            TrySetDerivedOption(def, "IncludeAllSolids", Inventor.DerivedComponentOptionEnum.kDerivedExcludeAll);
-            TrySetDerivedOption(def, "IncludeAllSurfaces", Inventor.DerivedComponentOptionEnum.kDerivedExcludeAll);
-
-            TrySetBool(def, "IncludeBody", false);
-            TrySetBool(def, "BodyAsSolidBody", false);
-
-            TrySetBool(def, "IncludeAllParameters", false);
-
-            TrySetDerivedOption(def, "IncludeAllSketches", Inventor.DerivedComponentOptionEnum.kDerivedIndividualDefined);
-            TrySetDerivedOption(def, "IncludeAllSketches3D", Inventor.DerivedComponentOptionEnum.kDerivedIndividualDefined);
-            TrySetDerivedOption(def, "IncludeAll3DSketches", Inventor.DerivedComponentOptionEnum.kDerivedIndividualDefined);
-            TrySetDerivedOption(def, "IncludeAllWorkFeatures", Inventor.DerivedComponentOptionEnum.kDerivedIndividualDefined);
-
-            TrySetDerivedOption(def, "IncludeAllSketchBlockDefinitions", Inventor.DerivedComponentOptionEnum.kDerivedExcludeAll);
-
-            ApplySelectionToDerivedCollection(def, "Sketches", sourceDoc, selectedEntityIds);
-            ApplySelectionToDerivedCollection(def, "Sketches3D", sourceDoc, selectedEntityIds);
-            ApplySelectionToDerivedCollection(def, "WorkFeatures", sourceDoc, selectedEntityIds);
-
-            ApplySelectionToDerivedCollection(def, "Parameters", sourceDoc, selectedEntityIds, forceExcludeAll: true);
-            ApplySelectionToDerivedCollection(def, "SketchBlockDefinitions", sourceDoc, selectedEntityIds, forceExcludeAll: true);
-            ApplySelectionToDerivedCollection(def, "SketchBlocks", sourceDoc, selectedEntityIds, forceExcludeAll: true);
-        }
-
-        private static void ApplySelectionToDerivedCollection(
-            dynamic def,
-            string collectionName,
-            Inventor._Document sourceDoc,
-            HashSet<string> selectedEntityIds,
-            bool forceExcludeAll = false)
-        {
-            object? colObj = null;
-            try { colObj = GetComPropertyValue(def, collectionName); } catch { colObj = null; }
-            if (colObj == null) return;
-
-            if (colObj is not System.Collections.IEnumerable en) return;
-
-            foreach (var item in en)
-            {
-                if (item == null) continue;
-
-                try
-                {
-                    dynamic di = item;
-
-                    object? referenced = null;
-                    try { referenced = di.ReferencedEntity; } catch { referenced = null; }
-                    if (referenced == null)
-                    {
-                        try { referenced = di.ReferencedObject; } catch { referenced = null; }
-                    }
-
-                    bool include = false;
-
-                    if (!forceExcludeAll && referenced != null)
-                    {
-                        string id = GetEntityId(sourceDoc, referenced);
-                        include = selectedEntityIds.Contains(id);
-                    }
-
-                    try { di.IncludeEntity = include; }
-                    catch
-                    {
-                        try { di.Include = include; } catch { }
-                    }
-                }
-                catch { }
-            }
-        }
-
-        private static void TrySetDerivedOption(dynamic def, string propName, Inventor.DerivedComponentOptionEnum value)
-        {
-            try
-            {
-                object? current = GetComPropertyValue(def, propName);
-                if (current == null)
-                {
-                    SetComPropertyValue(def, propName, value);
-                    return;
-                }
-
-                if (current is int)
-                    SetComPropertyValue(def, (string)propName, (int)value);
-                else
-                    SetComPropertyValue(def, propName, value);
-            }
-            catch { }
-        }
-
-        private static void TrySetBool(dynamic def, string propName, bool value)
-        {
-            try { SetComPropertyValue(def, propName, value); } catch { }
-        }
-
-        private static object? GetComPropertyValue(object comObj, string propName)
-        {
-            var props = TypeDescriptor.GetProperties(comObj);
-            var pd = props.Find(propName, ignoreCase: true);
-            if (pd == null) return null;
-            return pd.GetValue(comObj);
-        }
-
-        private static void SetComPropertyValue(object comObj, string propName, object value)
-        {
-            var props = TypeDescriptor.GetProperties(comObj);
-            var pd = props.Find(propName, ignoreCase: true);
-            if (pd == null) return;
-            pd.SetValue(comObj, value);
-        }
 
         // --- JSON persistence ---
 
@@ -1627,6 +1684,15 @@ try { if (_dock != null) _dock.Visible = false; } catch { }
             {
                 return string.IsNullOrWhiteSpace(PartNumber) ? "(no part number)" : PartNumber;
             }
+        }
+
+        /// <summary>Display item for the "Derived in Active Part" list, carrying the source file path.</summary>
+        private sealed class DerivedSourceItem
+        {
+            public string DisplayName { get; set; } = "";
+            public string SourceFullPath { get; set; } = "";
+
+            public override string ToString() => DisplayName;
         }
        private void MtFinish_OnExecute(NameValueMap Context)
         {

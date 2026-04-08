@@ -32,18 +32,94 @@ namespace RMAC_Efficiency_Addin.Exporting
         /// </summary>
         internal static bool SuppressDockUpdates { get; set; }
 
+        /// <summary>
+        /// When true, suppresses user-facing warning dialogs inside the exporter pipeline
+        /// (e.g. the token-formatting warning in <see cref="ApplyTokenFormatting"/>).
+        /// Intended for automated test runs so the harness cannot be blocked by modal dialogs.
+        /// Has no effect on result-object errors/warnings, which are always collected.
+        /// </summary>
+        internal static bool SuppressUiDialogs { get; set; }
+
+        /// <summary>
+        /// Public UI entry point. Prompts the user for an export folder, shows a progress dialog,
+        /// runs the export pipeline via <see cref="RunCore"/>, and presents the final result as a
+        /// modal dialog. Production callers (ribbon / dock pane) use this overload.
+        /// </summary>
         public static void Run(Inventor.Application app, DrawingDocument drawingDoc, object? selectedAssemblyObj, Action<string>? status = null)
         {
+            status ??= (_ => { });
+
+            // ---- Determine export folder (chosen at run-time; NOT a setting) ----
+            string exportRoot = ChooseExportFolder(app, drawingDoc);
+            if (string.IsNullOrWhiteSpace(exportRoot))
+                return; // user cancelled
+
+            // ---- Progress dialog ----
+            ExportProgressForm? progressForm = null;
+            try
+            {
+                progressForm = new ExportProgressForm();
+                progressForm.Show();
+                WF.Application.DoEvents();
+            }
+            catch { progressForm = null; }
+
+            // Augment status callback to also update the progress form
+            var originalStatus = status;
+            Action<string> forwardingStatus = msg =>
+            {
+                try { originalStatus(msg); } catch { }
+                try { progressForm?.UpdateStatusText(msg); } catch { }
+            };
+
+            ExportResult result;
+            try
+            {
+                result = RunCore(app, drawingDoc, selectedAssemblyObj, exportRoot, forwardingStatus, progressForm);
+            }
+            finally
+            {
+                try { progressForm?.Close(); } catch { }
+                try { progressForm?.Dispose(); } catch { }
+            }
+
+            // ---- Present result ----
+            if (result.Errors.Count > 0)
+            {
+                WF.MessageBox.Show("Export failed:\n\n" + string.Join("\n", result.Errors));
+                return;
+            }
+
+            WF.MessageBox.Show("Export Process has been completed");
+        }
+
+        /// <summary>
+        /// Pure export pipeline. No folder picker, no result dialogs — caller supplies the target
+        /// <paramref name="exportRoot"/> and receives an <see cref="ExportResult"/> describing what
+        /// happened. Progress form may be null (harness/test use).
+        ///
+        /// Still creates and tears down Inventor state (ScreenUpdating, SilentOperation,
+        /// SuppressDockUpdates) since these are intrinsic to running the export, not UI concerns.
+        /// </summary>
+        public static ExportResult RunCore(
+            Inventor.Application app,
+            DrawingDocument drawingDoc,
+            object? selectedAssemblyObj,
+            string exportRoot,
+            Action<string>? status = null,
+            ExportProgressForm? progressForm = null)
+        {
+            if (app == null) throw new ArgumentNullException(nameof(app));
+            if (drawingDoc == null) throw new ArgumentNullException(nameof(drawingDoc));
+            if (string.IsNullOrWhiteSpace(exportRoot)) throw new ArgumentException("Export root is required.", nameof(exportRoot));
+
             status ??= (_ => { });
             _formatWarnings.Clear();
 
             AddinSettings.EnsureLoaded();
             var exporting = AddinSettings.Current.Exporting;
 
-            // ---- Determine export folder (chosen at run-time; NOT a setting) ----
-            string exportRoot = ChooseExportFolder(app, drawingDoc);
-            if (string.IsNullOrWhiteSpace(exportRoot))
-                return; // user cancelled
+            var result = new ExportResult { OutputFolder = exportRoot };
 
             try { IODir.CreateDirectory(exportRoot); } catch { }
 
@@ -53,31 +129,11 @@ namespace RMAC_Efficiency_Addin.Exporting
             try { prevScreenUpdating = app.ScreenUpdating; } catch { }
             try { prevSilent = app.SilentOperation; } catch { }
 
-            ExportProgressForm? progressForm = null;
-
             try
             {
                 SuppressDockUpdates = true;   // prevent dock panels toggling during export
                 try { app.ScreenUpdating = false; } catch { }
                 try { app.SilentOperation = true; } catch { }
-
-                // ---- Progress dialog ----
-                try
-                {
-                    progressForm = new ExportProgressForm();
-                    progressForm.Show();
-                    WF.Application.DoEvents();
-                }
-                catch { progressForm = null; }
-
-                // Augment the status callback to also update the progress form text
-                // (step count is updated separately in ExecutePlan via UpdateProgress)
-                var originalStatus = status;
-                status = msg =>
-                {
-                    try { originalStatus(msg); } catch { }
-                    try { progressForm?.UpdateStatusText(msg); } catch { }
-                };
 
                 status($"Export folder: {exportRoot}");
 
@@ -85,10 +141,10 @@ namespace RMAC_Efficiency_Addin.Exporting
                 var asmDoc = ResolveTopAssembly(app, drawingDoc, selectedAssemblyObj, out bool openedAsmHere);
                 if (asmDoc == null)
                 {
-                    WF.MessageBox.Show(
-                        "Could not resolve the top-level assembly to export.\n\n" +
+                    result.Errors.Add(
+                        "Could not resolve the top-level assembly to export. " +
                         "Select an assembly (Part Numbering section) or ensure Sheet 1 View 1 references the top assembly.");
-                    return;
+                    return result;
                 }
 
                 // ---- Context + services ----
@@ -119,25 +175,26 @@ namespace RMAC_Efficiency_Addin.Exporting
                 // ---- Walk BOM (Parts Only) ----
                 status("Reading Parts Only BOM...");
                 var walk = walker.WalkPartsOnly(asmDoc);
-                foreach (var w in walk.Warnings) ctx.AddWarning(w);
-                foreach (var e in walk.Errors) ctx.AddError(e);
+                foreach (var w in walk.Warnings) { ctx.AddWarning(w); result.Warnings.Add(w); }
+                foreach (var e in walk.Errors) { ctx.AddError(e); result.Errors.Add(e); }
 
                 if (walk.Errors.Count > 0)
                 {
-                    WF.MessageBox.Show("BOM walk failed:\n\n" + string.Join("\n", walk.Errors));
                     SafeCloseAssemblyIfNeeded(asmDoc, openedAsmHere);
-                    return;
+                    return result;
                 }
 
                 // ---- Build plan ----
                 var plan = BuildPlan(ctx, classifier, resolver, router, walk.Items, asmDoc, drawingDoc, proj, rev, status);
                 try { progressForm?.SetTotalSteps(plan.Jobs.Count); } catch { }
+                result.JobsTotal = plan.Jobs.Count;
 
                 // ---- Execute plan ----
                 status("Executing export plan...");
                 ExecutePlan(ctx, plan, drawingDoc, proj, rev, status,
                     bomExporter, dxfExporter, stepExporter, drawingPackager, masterPdfBuilder,
                     progressForm);
+                result.JobsExecuted = plan.Jobs.Count;
 
                 // ---- BOM Export (Excel COM) ----
                 ExportBoms(ctx, bomExporter, asmDoc, plan, resolver, router, status);
@@ -147,13 +204,11 @@ namespace RMAC_Efficiency_Addin.Exporting
 
                 try { progressForm?.SetComplete(); } catch { }
                 status("Export complete.");
+
+                result.Success = true;
             }
             finally
             {
-                // ---- Dispose progress dialog ----
-                try { progressForm?.Close(); } catch { }
-                try { progressForm?.Dispose(); } catch { }
-
                 // ---- Restore screen updates + silent mode ----
                 try { app.SilentOperation = prevSilent; } catch { }
                 try { app.ScreenUpdating = prevScreenUpdating; } catch { }
@@ -163,7 +218,7 @@ namespace RMAC_Efficiency_Addin.Exporting
                 SuppressDockUpdates = false;
             }
 
-            WF.MessageBox.Show("Export Process has been completed");
+            return result;
         }
 
         private static ExportPlan BuildPlan(
@@ -1052,7 +1107,7 @@ namespace RMAC_Efficiency_Addin.Exporting
             if (!double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double numVal))
             {
                 // Non-numeric value with formatting requested — warn once per run
-                if (_formatWarnings.Add(tokenName))
+                if (_formatWarnings.Add(tokenName) && !SuppressUiDialogs)
                 {
                     WF.MessageBox.Show(
                         $"Token <{tokenName}> resolved to \"{rawValue}\" which is not numeric.\n" +

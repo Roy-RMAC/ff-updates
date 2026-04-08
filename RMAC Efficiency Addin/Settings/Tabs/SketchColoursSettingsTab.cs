@@ -22,6 +22,13 @@ namespace RMAC_Efficiency_Addin.UI.Settings
 
         private KryptonPage? _tab;
 
+        // Headline mode selector (includes "off")
+        private readonly KryptonComboBox _cmbColorMode = new()
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 220
+        };
+
         // Color swatches stay as standard Panels (they display colors, not themed chrome)
         private readonly Panel _swProjected = NewSwatch();
         private readonly Panel _swUnderCurve = NewSwatch();
@@ -33,11 +40,18 @@ namespace RMAC_Efficiency_Addin.UI.Settings
 
         private readonly KryptonButton _btnResetPalette = new() { Text = "Reset defaults" };
 
+        // Track palette-specific controls so we can enable/disable them
+        private readonly List<Control> _paletteControls = new();
+
         // ---- Visual tuning ----
-        // Make the Change/Reset buttons a bit taller and add breathing room between rows.
-        private const int RowHeight = 36;        // ~40% taller than the old 26px rows.
+        private const int RowHeight = 36;
         private const int HeaderRowHeight = 28;
-        private const int ButtonColumnWidth = 140; // Comfortable for "Change…" and aligns with "Reset defaults".
+        private const int ButtonColumnWidth = 140;
+
+        // Combo indices
+        private const int IdxDisabled = 0;
+        private const int IdxPalette = 1;
+        private const int IdxRandom = 2;
 
         public override KryptonPage BuildTab()
         {
@@ -58,6 +72,25 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ButtonColumnWidth)); // button
 
             int row = 0;
+
+            // Headline: sketch coloring mode
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute, RowHeight));
+            var modeLabel = new KryptonLabel
+            {
+                Text = "Sketch coloring mode:",
+                AutoSize = true,
+                Dock = DockStyle.Fill
+            };
+            modeLabel.StateCommon.ShortText.Font = new Font(SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont, FontStyle.Bold);
+            table.Controls.Add(modeLabel, 0, row);
+            _cmbColorMode.Dock = DockStyle.Fill;
+            table.Controls.Add(_cmbColorMode, 1, row);
+            table.SetColumnSpan(_cmbColorMode, 2);
+            row++;
+
+            // Spacer
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute, 8));
+            table.Controls.Add(new Label { AutoSize = true }, 0, row++);
 
             AddHeaderRow(table, row++, "Inactive Sketch Colour Palette");
 
@@ -91,6 +124,7 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             _btnResetPalette.Size = new Size(ButtonColumnWidth, RowHeight);
             _btnResetPalette.Margin = new Padding(0);
             bottom.Controls.Add(_btnResetPalette);
+            _paletteControls.Add(_btnResetPalette);
 
             var note = new KryptonLabel
             {
@@ -99,9 +133,16 @@ namespace RMAC_Efficiency_Addin.UI.Settings
                 Margin = new Padding(10, 7, 0, 0)
             };
             bottom.Controls.Add(note);
+            _paletteControls.Add(note);
 
             table.Controls.Add(bottom, 0, row);
             table.SetColumnSpan(bottom, 3);
+
+            // Populate combo (order must match IdxDisabled/IdxPalette/IdxRandom)
+            _cmbColorMode.Items.Clear();
+            _cmbColorMode.Items.Add("No formatting");
+            _cmbColorMode.Items.Add("Muted palette");
+            _cmbColorMode.Items.Add("Random colour per sketch");
 
             _tab.Controls.Add(table);
             return _tab;
@@ -115,17 +156,40 @@ namespace RMAC_Efficiency_Addin.UI.Settings
                 SetPaletteUi(InactiveSketchPaletteSettings.CreateDefaults());
                 Host.MarkChanged();
             };
+
+            _cmbColorMode.SelectedIndexChanged += (_, __) =>
+            {
+                if (Host.IsLoading) return;
+                UpdateControlStates();
+                Host.MarkChanged();
+            };
         }
 
         public override void LoadFromSettings()
         {
+            _cmbColorMode.SelectedIndex = AddinSettings.Current.InactiveSketchColorMode switch
+            {
+                InactiveSketchColorMode.Palette => IdxPalette,
+                InactiveSketchColorMode.RandomPerSketch => IdxRandom,
+                _ => IdxDisabled
+            };
+
             var pal = AddinSettings.Current.InactiveSketchPalette ?? InactiveSketchPaletteSettings.CreateDefaults();
             pal.SanitizeInPlace();
             SetPaletteUi(pal);
+
+            UpdateControlStates();
         }
 
         public override void ApplyToSettings()
         {
+            AddinSettings.Current.InactiveSketchColorMode = _cmbColorMode.SelectedIndex switch
+            {
+                IdxPalette => InactiveSketchColorMode.Palette,
+                IdxRandom => InactiveSketchColorMode.RandomPerSketch,
+                _ => InactiveSketchColorMode.Disabled
+            };
+
             AddinSettings.Current.InactiveSketchPalette = ReadPaletteUi();
             AddinSettings.Current.InactiveSketchPalette.SanitizeInPlace();
         }
@@ -133,6 +197,14 @@ namespace RMAC_Efficiency_Addin.UI.Settings
         public override void Validate(List<string> warnings, List<string> errors)
         {
             // No validation required.
+        }
+
+        private void UpdateControlStates()
+        {
+            bool isPaletteMode = _cmbColorMode.SelectedIndex == IdxPalette;
+
+            foreach (var c in _paletteControls)
+                c.Enabled = isPaletteMode;
         }
 
         private static Panel NewSwatch()
@@ -158,6 +230,7 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             lbl.StateCommon.ShortText.Font = new Font(SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont, FontStyle.Bold);
             table.Controls.Add(lbl, 0, row);
             table.SetColumnSpan(lbl, 3);
+            _paletteControls.Add(lbl);
         }
 
         private void AddSectionRow(TableLayoutPanel table, int row, string section)
@@ -176,6 +249,7 @@ namespace RMAC_Efficiency_Addin.UI.Settings
 
             table.Controls.Add(lbl, 0, row);
             table.SetColumnSpan(lbl, 3);
+            _paletteControls.Add(lbl);
         }
 
         private void AddColourRow(TableLayoutPanel table, int row, string label, Panel swatch)
@@ -198,7 +272,6 @@ namespace RMAC_Efficiency_Addin.UI.Settings
                 Tag = swatch
             };
 
-            // Give it a bit more height and nicer internal spacing.
             btn.AutoSize = false;
             btn.MinimumSize = new Size(0, RowHeight);
             btn.Padding = new Padding(10, 0, 10, 0);
@@ -212,6 +285,10 @@ namespace RMAC_Efficiency_Addin.UI.Settings
             table.Controls.Add(lbl, 0, row);
             table.Controls.Add(swatch, 1, row);
             table.Controls.Add(btn, 2, row);
+
+            _paletteControls.Add(lbl);
+            _paletteControls.Add(swatch);
+            _paletteControls.Add(btn);
         }
 
         private void ChangeSwatchColor(Panel swatch)

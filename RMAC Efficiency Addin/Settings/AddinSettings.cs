@@ -339,7 +339,8 @@ namespace RMAC_Efficiency_Addin.Settings
         // v9: ExportingSettings (category-controlled global exporter)
         // v10: CommentsOptionsSettings (unifies comment-options.json into settings.json)
         // v11: BomColumns (configurable BOM columns)
-        public int SettingsVersion { get; set; } = 11;
+        // v12: SketchColoringEnabled + InactiveSketchColorMode
+        public int SettingsVersion { get; set; } = 12;
 
         public bool Debug { get; set; } = false;
         public DimPolicyMode DimMode { get; set; } = DimPolicyMode.NamedOnly;
@@ -358,6 +359,12 @@ namespace RMAC_Efficiency_Addin.Settings
         public string SkipRenumberPropertySelection { get; set; } = "Project";
         public string SkipRenumberCustomPropertyName { get; set; } = "";
         public string SkipRenumberMatchValue { get; set; } = "TEST";
+
+        public InactiveSketchColorMode InactiveSketchColorMode { get; set; } = InactiveSketchColorMode.Palette;
+
+        /// <summary>Convenience: true when any sketch coloring mode is active.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool SketchColoringEnabled => InactiveSketchColorMode != InactiveSketchColorMode.Disabled;
 
         public InactiveSketchPaletteSettings InactiveSketchPalette { get; set; } =
             InactiveSketchPaletteSettings.CreateDefaults();
@@ -402,12 +409,12 @@ namespace RMAC_Efficiency_Addin.Settings
         };
 
         internal static string CompanySettingsDir =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RMAC Efficiency Addin");
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FabFlow Addin");
 
         internal static string CompanySettingsPath => Path.Combine(CompanySettingsDir, "settings.json");
 
         internal static string UserSettingsDir =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RMAC Efficiency Addin");
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FabFlow Addin");
 
         internal static string UserSettingsPath => Path.Combine(UserSettingsDir, "settings.json");
 
@@ -493,7 +500,7 @@ namespace RMAC_Efficiency_Addin.Settings
                 s.SettingsVersion = 1;
 
             // step migrations
-            while (s.SettingsVersion < 11)
+            while (s.SettingsVersion < 12)
             {
                 switch (s.SettingsVersion)
                 {
@@ -576,8 +583,20 @@ namespace RMAC_Efficiency_Addin.Settings
                         s.SettingsVersion = 11;
                         break;
 
+                    case 11:
+                        // v12: InactiveSketchColorMode (Disabled=0, Palette=1, Random=2)
+                        // Old enum had Palette=0, Random=1. Shift values up by 1.
+                        // Also honour old SketchColoringEnabled=false -> Disabled.
+                        {
+                            int oldMode = (int)s.InactiveSketchColorMode;
+                            if (oldMode <= 1)
+                                s.InactiveSketchColorMode = (InactiveSketchColorMode)(oldMode + 1);
+                        }
+                        s.SettingsVersion = 12;
+                        break;
+
                     default:
-                        s.SettingsVersion = 11;
+                        s.SettingsVersion = 12;
                         break;
                 }
             }
@@ -611,8 +630,8 @@ namespace RMAC_Efficiency_Addin.Settings
                 s.CommentsOptions = CommentsOptionsSettings.CreateDefaults();
             s.CommentsOptions.SanitizeInPlace();
 
-            if (s.SettingsVersion < 11)
-                s.SettingsVersion = 11;
+            if (s.SettingsVersion < 12)
+                s.SettingsVersion = 12;
         }
 
         private static void TryMigrateLegacyCommentOptionsIntoSettings(AddinSettings s, string? loadedSettingsPath)

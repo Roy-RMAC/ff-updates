@@ -121,7 +121,7 @@ namespace RMAC_Efficiency_Addin
                 {
                     RunFast("RMAC Apply Dimension Mode", () =>
                     {
-                        ApplyDimModeImmediateToPart(pd, AddinSettings.Current.DimMode);
+                        DimModeCore.ApplyToPart(pd, AddinSettings.Current.DimMode, _dims!);
                     });
                 }
             }
@@ -175,6 +175,29 @@ namespace RMAC_Efficiency_Addin
                 }
                 catch { }
             }
+
+#if TEST_HARNESS
+            // Self-test harness trigger. Only compiled in the Debug-Test build configuration.
+            // Fires when FABFLOW_SELFTEST=1 is set in the environment (see Tests\RunOneVersion.bat).
+            // Deferred via Task.Delay so Inventor's UI has time to stabilise before tests run.
+            if (System.Environment.GetEnvironmentVariable("FABFLOW_SELFTEST") == "1")
+            {
+                var harnessSyncCtx = SynchronizationContext.Current;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(3000);
+                        harnessSyncCtx?.Post(_ =>
+                        {
+                            try { TestHarness.SelfTestRunner.Run(m_inventorApplication!); }
+                            catch { /* harness must never crash the add-in */ }
+                        }, null);
+                    }
+                    catch { }
+                });
+            }
+#endif
 
             // Background update check (fire-and-forget, never crashes the addin)
             var syncCtx = SynchronizationContext.Current;
@@ -362,7 +385,7 @@ namespace RMAC_Efficiency_Addin
 
                 RunFast("RMAC Hide All Sketches", () =>
                 {
-                    SetAllSketchesVisible(partDoc, false);
+                    SketchVisibilityCore.SetAll(partDoc, makeVisible: false);
                 });
 
                 // No completion message (per request).
@@ -401,7 +424,7 @@ namespace RMAC_Efficiency_Addin
 
                 RunFast("RMAC Show All Sketches", () =>
                 {
-                    SetAllSketchesVisible(partDoc, true);
+                    SketchVisibilityCore.SetAll(partDoc, makeVisible: true);
                 });
 
                 // No completion message (per request).
@@ -457,8 +480,7 @@ namespace RMAC_Efficiency_Addin
 
                 RunFast("RMAC Pin Sketch Dimensions", () =>
                 {
-                    _dims!.ApplyShowAll(sk);
-                    SketchDimPin.SetPinned(sk, true);
+                    SketchDimCore.ShowAndPin(sk, _dims!);
                 });
             }
             catch (COMException)
@@ -494,8 +516,7 @@ namespace RMAC_Efficiency_Addin
 
                 RunFast("RMAC Unpin Sketch Dimensions", () =>
                 {
-                    SketchDimPin.SetPinned(sk, false);
-                    ApplyDimModeImmediateToSketch(sk, AddinSettings.Current.DimMode, respectPinned: false);
+                    SketchDimCore.UnpinAndApply(sk, AddinSettings.Current.DimMode, _dims!);
                 });
             }
             catch (COMException)
@@ -540,7 +561,7 @@ namespace RMAC_Efficiency_Addin
                 {
                     // This command only executes reliably while a sketch is active.
                     // Use the first selected/picked sketch as our entry point.
-                    EnsureShowFormatState(app, sketches[0], desiredOn: true);
+                    SketchColorCore.ClearOverrides(app, sketches[0], _sketchShowFormat);
                 });
 
                 try { app.ActiveView.Update(); } catch { }
@@ -585,15 +606,7 @@ namespace RMAC_Efficiency_Addin
 
                 RunFast("RMAC Disable Show Format", () =>
                 {
-                    // This command only executes reliably while a sketch is active.
-                    // Use the first selected/picked sketch as our entry point.
-                    EnsureShowFormatState(app, sketches[0], desiredOn: false);
-
-                    // Re-apply our inactive palette so the user immediately sees the custom scheme again.
-                    foreach (var sk in sketches)
-                    {
-                        try { _styler!.ApplyInactive(sk); } catch { }
-                    }
+                    SketchColorCore.ReleaseHold(app, sketches, _sketchShowFormat, _styler!);
                 });
 
                 try { app.ActiveView.Update(); } catch { }
@@ -659,7 +672,7 @@ namespace RMAC_Efficiency_Addin
                 {
                     RunFast("RMAC Set Dimension Mode", () =>
                     {
-                        ApplyDimModeImmediateToPart(partDoc, mode);
+                        DimModeCore.ApplyToPart(partDoc, mode, _dims!);
                     });
                 }
             }
@@ -677,37 +690,6 @@ namespace RMAC_Efficiency_Addin
                 2 => DimPolicyMode.AllHidden,
                 _ => DimPolicyMode.NamedOnly
             };
-        }
-
-        private void ApplyDimModeImmediateToPart(Inventor.PartDocument partDoc, DimPolicyMode mode)
-        {
-            foreach (object sk in EnumerateSketches(partDoc))
-                ApplyDimModeImmediateToSketch(sk, mode, respectPinned: true);
-        }
-
-        private void ApplyDimModeImmediateToSketch(object sketchObj, DimPolicyMode mode, bool respectPinned)
-        {
-            if (respectPinned && SketchDimPin.IsPinned(sketchObj))
-            {
-                _dims!.ApplyShowAll(sketchObj);
-                return;
-            }
-
-            switch (mode)
-            {
-                case DimPolicyMode.AllVisible:
-                    _dims!.ApplyShowAll(sketchObj);
-                    break;
-
-                case DimPolicyMode.AllHidden:
-                    _dims!.ApplyHideAll(sketchObj);
-                    break;
-
-                case DimPolicyMode.NamedOnly:
-                default:
-                    _dims!.ApplyNamedOnly(sketchObj);
-                    break;
-            }
         }
 
         private void ApplyDimExitPolicy(object sketchObj)
@@ -731,17 +713,6 @@ namespace RMAC_Efficiency_Addin
                     // Do nothing: leave current visibility as-is.
                     break;
             }
-        }
-
-        private static IEnumerable<object> EnumerateSketches(Inventor.PartDocument partDoc)
-        {
-            var def = partDoc.ComponentDefinition;
-
-            foreach (object o in def.Sketches)
-                if (o is Inventor.Sketch s) yield return s;
-
-            foreach (object o in def.Sketches3D)
-                if (o is Inventor.Sketch3D s3) yield return s3;
         }
 
         private static bool IsSketchEditActive(Inventor.Application app)
@@ -927,46 +898,9 @@ namespace RMAC_Efficiency_Addin
             return null;
         }
 
-        private static void SetAllSketchesVisible(Inventor.PartDocument partDoc, bool makeVisible)
-        {
-            var def = partDoc.ComponentDefinition;
-
-            // 2D sketches
-            foreach (object o in def.Sketches)
-            {
-                if (o is not Inventor.Sketch sk) continue;
-                try { sk.Visible = makeVisible; }
-                catch { /* ignore */ }
-            }
-
-            // 3D sketches
-            foreach (object o in def.Sketches3D)
-            {
-                if (o is not Inventor.Sketch3D sk3) continue;
-                try { sk3.Visible = makeVisible; }
-                catch { /* ignore */ }
-            }
-        }
-
         private void FindSketchPropertyCommands()
         {
-            var defs = m_inventorApplication!.CommandManager.ControlDefinitions;
-            var hits = new List<string>();
-
-            foreach (ControlDefinition d in defs)
-            {
-                var name = d.InternalName ?? "";
-                var desc = d.DescriptionText ?? "";
-                var disp = d.DisplayName ?? "";
-
-                var blob = (name + " " + disp + " " + desc).ToLowerInvariant();
-                if (blob.Contains("sketch") && (blob.Contains("prop") || blob.Contains("color") || blob.Contains("style")))
-                {
-                    hits.Add($"{name} | {disp} | {desc}");
-                    if (hits.Count > 50) break;
-                }
-            }
-
+            var hits = SketchCommandInspector.FindMatches(m_inventorApplication!);
             MessageBox.Show(string.Join("\n", hits), "Possible Sketch Commands");
         }
 
@@ -1014,7 +948,7 @@ namespace RMAC_Efficiency_Addin
                     {
                         RunFast("RMAC Apply Dimension Mode", () =>
                         {
-                            ApplyDimModeImmediateToPart(pd, AddinSettings.Current.DimMode);
+                            DimModeCore.ApplyToPart(pd, AddinSettings.Current.DimMode, _dims!);
                         });
                     }
                 }
@@ -1035,13 +969,19 @@ namespace RMAC_Efficiency_Addin
                     return;
                 }
 
+                if (!AddinSettings.Current.SketchColoringEnabled)
+                {
+                    try { app.StatusBarText = "FabFlow: Sketch coloring is set to 'No formatting'."; } catch { }
+                    return;
+                }
+
                 RunFast("RMAC Legacy Sketch Sweep", () =>
                 {
-                    _styler!.ApplyInactiveToPart(partDoc);
+                    LegacySweepCore.Run(partDoc, _styler!);
                 });
 
                 // No modal popup on success (keep workflow fast / non-blocking)
-                try { app.StatusBarText = "RMAC: Format All Sketches complete."; } catch { }
+                try { app.StatusBarText = "FabFlow: Format All Sketches complete."; } catch { }
             }
             catch (Exception ex)
             {
@@ -1052,105 +992,7 @@ namespace RMAC_Efficiency_Addin
         private void RunFast(string name, Action action)
         {
             var app = m_inventorApplication!;
-            bool oldSU = app.ScreenUpdating;
-            Transaction? tx = null;
-
-            try
-            {
-                app.ScreenUpdating = false;
-                tx = app.TransactionManager.StartTransaction(app.ActiveDocument, name);
-
-                action();
-
-                tx.End();
-            }
-            catch
-            {
-                try { tx?.Abort(); } catch { }
-                throw;
-            }
-            finally
-            {
-                app.ScreenUpdating = oldSU;
-                try { if (app.ActiveDocument != null) app.ActiveView.Update(); } catch { }
-            }
-        }
-
-        /// <summary>
-        /// Ensure Inventor's "Show Format" toggle (AppLinePropertiesToggleCmd) is in the desired state.
-        /// This command only executes reliably while a sketch is active, so we use a brief Edit/ExitEdit
-        /// round-trip on the provided sketch.
-        ///
-        /// IMPORTANT: This is intentionally global/session-level behaviour (no per-sketch hold logic).
-        /// </summary>
-        private void EnsureShowFormatState(Inventor.Application app, object sketchObj, bool desiredOn)
-        {
-            var btn = app.CommandManager.ControlDefinitions["AppLinePropertiesToggleCmd"] as ButtonDefinition;
-            if (btn == null)
-                throw new InvalidOperationException("Could not resolve Inventor command: AppLinePropertiesToggleCmd (Show Format).");
-
-            bool pressedOutside;
-            try { pressedOutside = btn.Pressed; }
-            catch { pressedOutside = !desiredOn; }
-
-// NOTE:
-// ButtonDefinition.Pressed is not reliably readable outside an active sketch environment for
-// AppLinePropertiesToggleCmd. It can report "false" even when the toggle is effectively ON for sketches.
-// To avoid a silent no-op (especially when turning OFF), we always do a brief sketch Edit/ExitEdit
-// round-trip and decide based on the state read while the sketch environment is active.
-
-            void ExecuteToggleInSketch()
-            {
-                bool pressed;
-                try { pressed = btn.Pressed; }
-                catch { pressed = pressedOutside; }
-
-                if (pressed == desiredOn) return;
-
-                try { btn.Execute(); }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException($"Failed to execute Show Format toggle: {ex.Message}");
-                }
-            }
-
-            Action roundTrip = () =>
-            {
-                if (sketchObj is Inventor.Sketch s2)
-                {
-                    s2.Edit();
-                    try { ExecuteToggleInSketch(); }
-                    finally { try { s2.ExitEdit(); } catch { } }
-                    return;
-                }
-
-                if (sketchObj is Inventor.Sketch3D s3)
-                {
-                    s3.Edit();
-                    try { ExecuteToggleInSketch(); }
-                    finally { try { s3.ExitEdit(); } catch { } }
-                    return;
-                }
-
-                try
-                {
-                    dynamic d = sketchObj;
-                    d.Edit();
-                    try { ExecuteToggleInSketch(); }
-                    finally { try { d.ExitEdit(); } catch { } }
-                }
-                catch
-                {
-                    // Last resort: attempt direct execution (may no-op if not in sketch env)
-                    ExecuteToggleInSketch();
-                }
-            };
-
-            // Suppress controller side-effects while we do programmatic sketch edits.
-            if (_sketchShowFormat != null)
-                _sketchShowFormat.RunSuppressed(roundTrip);
-            else
-                roundTrip();
+            RMAC_Efficiency_Addin.Infrastructure.InventorTransaction.RunFast(app, app.ActiveDocument, name, action);
         }
 
         private static bool Is2DSketchEditObject(object o)
@@ -1285,7 +1127,7 @@ namespace RMAC_Efficiency_Addin
 
                 if (picked == null) return;
 
-                string report = ClearOverrideColor_OnSingleObject_WithDiagnostics(picked);
+                string report = SketchColorCore.ClearOneOverride(picked);
 
                 // Copy to clipboard (best effort)
                 try { System.Windows.Forms.Clipboard.SetText(report); } catch { }
@@ -1306,131 +1148,6 @@ namespace RMAC_Efficiency_Addin
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Clear Line Override - Error");
-            }
-        }
-
-        /// <summary>
-        /// Attempts to clear OverrideColor on a single sketch entity using multiple COM semantics,
-        /// and returns a diagnostic report showing what worked (if anything).
-        /// </summary>
-        private static string ClearOverrideColor_OnSingleObject_WithDiagnostics(object obj)
-        {
-            var sb = new System.Text.StringBuilder();
-
-            string typeName = "(unknown)";
-            try { typeName = obj.GetType().FullName ?? obj.GetType().Name; } catch { }
-            sb.AppendLine($"Target runtime type: {typeName}");
-
-            // Read before (best effort)
-            object? before = null;
-            bool canRead = false;
-            try
-            {
-                dynamic d = obj;
-                before = d.OverrideColor;
-                canRead = true;
-                sb.AppendLine($"OverrideColor before: {(before == null ? "null" : "non-null")}");
-            }
-            catch (Exception ex)
-            {
-                sb.AppendLine($"OverrideColor before: <READ FAIL> {ex.GetType().Name} - {ex.Message}");
-            }
-
-            // Try clear strategies in order
-            var attempts = new (string name, Func<bool> fn)[]
-            {
-        ("PUTREF VT_DISPATCH(null) via DispatchWrapper(null)", () => TryInvokeMember(obj,
-            System.Reflection.BindingFlags.PutRefDispProperty,
-            new object[] { new System.Runtime.InteropServices.DispatchWrapper(null) })),
-
-        ("PUTREF null", () => TryInvokeMember(obj,
-            System.Reflection.BindingFlags.PutRefDispProperty,
-            new object?[] { null })),
-
-        ("PUT VT_EMPTY via Missing.Value (OptionalParamBinding)", () => TryInvokeMember(obj,
-            System.Reflection.BindingFlags.PutDispProperty | System.Reflection.BindingFlags.OptionalParamBinding,
-            new object[] { System.Reflection.Missing.Value })),
-
-        ("PUT VT_NULL via DBNull.Value", () => TryInvokeMember(obj,
-            System.Reflection.BindingFlags.PutDispProperty,
-            new object[] { System.DBNull.Value })),
-
-        ("PUT null", () => TryInvokeMember(obj,
-            System.Reflection.BindingFlags.PutDispProperty,
-            new object?[] { null })),
-            };
-
-            bool anyWorked = false;
-            foreach (var a in attempts)
-            {
-                bool ok = false;
-                string? err = null;
-
-                try
-                {
-                    ok = a.fn();
-                }
-                catch (Exception ex)
-                {
-                    ok = false;
-                    err = $"{ex.GetType().Name} - {ex.Message}";
-                }
-
-                sb.AppendLine($"{(ok ? "[OK]  " : "[FAIL]")} {a.name}{(err != null ? " :: " + err : "")}");
-
-                if (ok)
-                {
-                    anyWorked = true;
-                    break;
-                }
-            }
-
-            sb.AppendLine($"Any call returned OK: {anyWorked}");
-
-            // Read after (best effort)
-            object? after = null;
-            bool canReadAfter = false;
-            try
-            {
-                dynamic d = obj;
-                after = d.OverrideColor;
-                canReadAfter = true;
-                sb.AppendLine($"OverrideColor after: {(after == null ? "null" : "non-null")}");
-            }
-            catch (Exception ex)
-            {
-                sb.AppendLine($"OverrideColor after: <READ FAIL> {ex.GetType().Name} - {ex.Message}");
-            }
-
-            // Interpretation line
-            if (canRead && canReadAfter && before != null && after == null)
-                sb.AppendLine("Result: VERIFIED CLEARED (before non-null -> after null).");
-            else if (anyWorked && canReadAfter && after != null)
-                sb.AppendLine("Result: CALL REPORTED OK but OverrideColor still reads non-null.");
-            else if (anyWorked && !canReadAfter)
-                sb.AppendLine("Result: CALL REPORTED OK but cannot verify via getter on this object.");
-            else
-                sb.AppendLine("Result: NO CLEAR METHOD SUCCEEDED (all failed).");
-
-            return sb.ToString();
-        }
-
-        private static bool TryInvokeMember(object comObj, System.Reflection.BindingFlags flags, object?[] args)
-        {
-            try
-            {
-                comObj.GetType().InvokeMember(
-                    "OverrideColor",
-                    flags,
-                    null,
-                    comObj,
-                    args
-                );
-                return true;
-            }
-            catch
-            {
-                return false;
             }
         }
 

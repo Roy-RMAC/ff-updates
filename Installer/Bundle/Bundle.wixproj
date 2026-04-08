@@ -15,4 +15,8 @@
     <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <BootstrapperApplicationContent Include="license.rtf" />
+  </ItemGroup>
+
 </Project>

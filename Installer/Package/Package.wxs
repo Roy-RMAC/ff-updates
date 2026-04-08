@@ -1,24 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  RMAC Efficiency Addin - MSI Package
+  FabFlow Addin - MSI Package
   ====================================
   Build:  dotnet build -c Installer  (main project first)
           dotnet build Package.wixproj
 
+  Deploys as an Autodesk ApplicationPlugins bundle:
+    %ProgramData%\Autodesk\ApplicationPlugins\FabFlow.bundle\
+      PackageContents.xml
+      Contents\
+        FabFlow.addin
+        RMAC Efficiency Addin.dll
+        (all dependencies)
+
+  All Inventor versions (2024-2027) scan this single location,
+  so no per-version installer logic is required.
+
   UpgradeCode is PERMANENT. Never change it - it enables seamless major upgrades.
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 
-  <Package Name="RMAC Efficiency Addin"
-           Manufacturer="RMAC Design"
+  <Package Name="FabFlow Addin"
+           Manufacturer="FabFlow"
            Version="$(var.AddinVersion)"
            UpgradeCode="A72F8B3E-5D14-49C6-B8E1-7F3A2D6C9E45"
            Compressed="yes"
            InstallerVersion="500"
            Scope="perMachine">
 
-    <SummaryInformation Description="RMAC Efficiency Addin for Autodesk Inventor 2025" />
+    <SummaryInformation Description="FabFlow Addin for Autodesk Inventor" />
 
     <!-- Automatically removes older versions during upgrade -->
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
@@ -26,29 +36,24 @@
     <MediaTemplate EmbedCab="yes" />
 
     <!-- ============================================================
-         Directory layout
+         Directory layout - Autodesk ApplicationPlugins bundle
          ============================================================ -->
-
-    <!-- DLLs and dependencies -->
-    <StandardDirectory Id="ProgramFiles6432Folder">
-      <Directory Id="CompanyDir" Name="RMAC Design">
-        <Directory Id="INSTALLFOLDER" Name="RMAC Efficiency Addin" />
-      </Directory>
-    </StandardDirectory>
-
-    <!-- .addin manifest (all-users, version-independent Inventor location) -->
     <StandardDirectory Id="CommonAppDataFolder">
       <Directory Id="AutodeskDir" Name="Autodesk">
-        <Directory Id="ADDINSFOLDER" Name="Inventor Addins" />
+        <Directory Id="AppPluginsDir" Name="ApplicationPlugins">
+          <Directory Id="BUNDLEFOLDER" Name="FabFlow.bundle">
+            <Directory Id="INSTALLFOLDER" Name="Contents" />
+          </Directory>
+        </Directory>
       </Directory>
     </StandardDirectory>
 
     <!-- ============================================================
          Feature tree
          ============================================================ -->
-
-    <Feature Id="Main" Title="RMAC Efficiency Addin" Level="1">
+    <Feature Id="Main" Title="FabFlow Addin" Level="1">
       <ComponentGroupRef Id="AddinFiles" />
+      <ComponentRef Id="PackageContentsManifest" />
       <ComponentRef Id="AddinManifest" />
     </Feature>
 
@@ -56,9 +61,8 @@
 
   <!-- ==============================================================
        Addin DLLs, .deps.json, runtimes subfolder, etc.
-       Auto-harvested from the Installer build output folder.
-       Add or remove NuGet packages in the main project and they
-       are automatically picked up here - no manual file list needed.
+       Auto-harvested from the Installer build output folder into
+       the bundle's Contents\ directory.
        ============================================================== -->
   <Fragment>
     <ComponentGroup Id="AddinFiles" Directory="INSTALLFOLDER">
@@ -67,21 +71,26 @@
   </Fragment>
 
   <!-- ==============================================================
-       .addin manifest - deployed to Inventor's common addins folder.
-       The template ships with PLACEHOLDER in the Assembly element;
-       util:XmlFile patches it at install time with the real path.
+       PackageContents.xml - sits at the bundle root.
+       Declares the supported Inventor version range (2024-2027).
        ============================================================== -->
   <Fragment>
-    <Component Id="AddinManifest" Directory="ADDINSFOLDER" Guid="C94FAD5F-7F36-4BE8-DAA3-9B5C4F8E1A67">
+    <Component Id="PackageContentsManifest" Directory="BUNDLEFOLDER" Guid="D83A6C1F-2E45-4B8C-A9D2-8E7F1B3D5A92">
+      <File Id="PackageContentsFile"
+            Source="PackageContents.xml"
+            Name="PackageContents.xml" />
+    </Component>
+  </Fragment>
+
+  <!-- ==============================================================
+       .addin manifest - ships inside Contents\ alongside the DLL.
+       Assembly path is relative, so no install-time patching needed.
+       ============================================================== -->
+  <Fragment>
+    <Component Id="AddinManifest" Directory="INSTALLFOLDER" Guid="C94FAD5F-7F36-4BE8-DAA3-9B5C4F8E1A67">
       <File Id="AddinFile"
             Source="Addin.addin"
-            Name="Autodesk.RMAC Efficiency Addin.Inventor.addin" />
-
-      <util:XmlFile Id="PatchAssemblyPath"
-                    File="[#AddinFile]"
-                    Action="setValue"
-                    ElementPath="/Addin/Assembly"
-                    Value="[INSTALLFOLDER]RMAC Efficiency Addin.dll" />
+            Name="FabFlow.addin" />
     </Component>
   </Fragment>
 

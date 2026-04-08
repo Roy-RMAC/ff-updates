@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  RMAC Efficiency Addin - Burn Bootstrapper
+  FabFlow Addin - Burn Bootstrapper
   ==========================================
   Produces a single Setup.exe that:
     1. Downloads and installs .NET 8 Desktop Runtime (x64) if needed
@@ -15,14 +15,14 @@
      xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
-  <Bundle Name="RMAC Efficiency Addin Setup"
-          Manufacturer="RMAC Design"
+  <Bundle Name="FabFlow Addin Setup"
+          Manufacturer="FabFlow"
           Version="$(var.AddinVersion)"
           UpgradeCode="B83F9C4E-6E25-4AD7-C9F2-8A4B3E7D0F56">
 
     <BootstrapperApplication>
       <bal:WixStandardBootstrapperApplication
-          LicenseUrl=""
+          LicenseUrl="license.rtf"
           Theme="hyperlinkLicense" />
     </BootstrapperApplication>
 

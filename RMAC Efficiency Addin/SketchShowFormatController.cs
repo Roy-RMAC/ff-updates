@@ -1,6 +1,7 @@
 using Inventor;
 using System;
 using RMAC_Efficiency_Addin.Infrastructure;
+using RMAC_Efficiency_Addin.Settings;
 using WF = System.Windows.Forms;
 
 using InvEnvironment = Inventor.Environment;
@@ -162,6 +163,8 @@ namespace RMAC_Efficiency_Addin
         /// </summary>
         public void PrimeIfNeeded(PartDocument partDoc)
         {
+            if (!AddinSettings.Current.SketchColoringEnabled) return;
+
             try
             {
                 string key = GetDocKey(partDoc);
@@ -210,16 +213,18 @@ namespace RMAC_Efficiency_Addin
                     if (sketchToPrime is Sketch s2)
                     {
                         s2.Edit();
+                        try { TryGetShowFormatPressed(out _); } catch { }
                         try { s2.ExitEdit(); } catch { }
                     }
                     else if (sketchToPrime is Sketch3D s3)
                     {
                         s3.Edit();
+                        try { TryGetShowFormatPressed(out _); } catch { }
                         try { s3.ExitEdit(); } catch { }
                     }
                 });
 
-                Log("PrimeIfNeeded: done.");
+                Log($"PrimeIfNeeded: done. Toggle cache={(_formatToggleState.HasValue ? _formatToggleState.Value.ToString() : "null")}");
             }
             catch (Exception ex)
             {
@@ -239,6 +244,7 @@ namespace RMAC_Efficiency_Addin
             HandlingCode = HandlingCodeEnum.kEventNotHandled;
             if (IsSuppressed) return;
             if (BeforeOrAfter != EventTimingEnum.kAfter) return;
+            if (!AddinSettings.Current.SketchColoringEnabled) return;
 
             try
             {
@@ -293,6 +299,7 @@ namespace RMAC_Efficiency_Addin
         {
             HandlingCode = HandlingCodeEnum.kEventNotHandled;
             if (IsSuppressed) return;
+            if (!AddinSettings.Current.SketchColoringEnabled) return;
 
             try
             {

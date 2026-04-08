@@ -699,7 +699,7 @@ namespace RMAC_Efficiency_Addin.DrawingDock
             try
             {
                 var sel = _selectionSvc.GetSelectionSnapshot();
-                var dv = _selectionSvc.TryResolveDrawingView(sel);
+                var dv = SelectionService.TryResolveDrawingView(sel);
 
                 if (dv != null)
                 {
@@ -725,7 +725,7 @@ namespace RMAC_Efficiency_Addin.DrawingDock
             return null;
         }
 
-        private static AssemblyDocument? TryGetAssemblyFromDrawingView(DrawingView dv)
+        internal static AssemblyDocument? TryGetAssemblyFromDrawingView(DrawingView dv)
         {
             try
             {

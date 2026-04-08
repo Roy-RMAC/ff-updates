@@ -31,10 +31,8 @@ namespace RMAC_Efficiency_Addin.Licensing
 
         private const string BaseUrl = "https://api.lemonsqueezy.com";
 
-        // TODO: Set these to your Lemon Squeezy store/product IDs to prevent
-        // keys from other products being used. Find them in your LS dashboard.
-        private const int ExpectedStoreId = 0;
-        private const int ExpectedProductId = 0;
+        private const int ExpectedStoreId = 311732;
+        private const int ExpectedProductId = 882869;
 
         public static async Task<ActivateResult> ActivateAsync(string licenseKey, string instanceName)
         {

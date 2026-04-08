@@ -12,7 +12,7 @@ namespace RMAC_Efficiency_Addin.Licensing
 
         private static readonly string _dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "RMAC Design");
+            "FabFlow");
 
         private static readonly string _path = Path.Combine(_dir, "license.dat");
 

@@ -18,7 +18,7 @@ namespace RMAC_Efficiency_Addin.Updates
 
         private static readonly string UpdateDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "RMAC Design", "Updates");
+            "FabFlow", "Updates");
 
         /// <summary>
         /// Checks the remote version.json and returns info if a newer version is available.
@@ -59,7 +59,7 @@ namespace RMAC_Efficiency_Addin.Updates
             }
             catch { }
 
-            var fileName = "RMACEfficiencySetup.exe";
+            var fileName = "FabFlowSetup.exe";
             var localPath = Path.Combine(UpdateDir, fileName);
 
             using var response = await _http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead)

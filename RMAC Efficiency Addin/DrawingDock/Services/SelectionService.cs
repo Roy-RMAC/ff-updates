@@ -22,13 +22,24 @@ namespace RMAC_Efficiency_Addin.DrawingDock.Services
         }
 
         /// <summary>
-        /// Returns a snapshot of current selection items (SelectSet), 1-based COM enumeration safe.
+        /// Returns a snapshot of current selection items from the application's active document.
+        /// Thin shim over <see cref="GetSelectionSnapshot(Document?)"/>.
         /// </summary>
         public IReadOnlyList<object> GetSelectionSnapshot()
         {
+            return GetSelectionSnapshot(TryGetActiveDocument());
+        }
+
+        /// <summary>
+        /// Returns a snapshot of selection items from the given document. 1-based COM-safe enumeration.
+        /// Exposed as an overload so tests and other callers can drive selection reads without
+        /// depending on <c>Application.ActiveDocument</c>.
+        /// </summary>
+        public static IReadOnlyList<object> GetSelectionSnapshot(Document? doc)
+        {
             var list = new List<object>(8);
 
-            SelectSet? ss = TryGetSelectSet();
+            SelectSet? ss = TryGetSelectSet(doc);
             if (ss == null) return list;
 
             int count = 0;
@@ -61,7 +72,7 @@ namespace RMAC_Efficiency_Addin.DrawingDock.Services
         }
 
         /// <summary>
-        /// Tries to resolve a DrawingView from current selection.
+        /// Tries to resolve a DrawingView from current selection in the active document.
         /// Works when user selects:
         /// - DrawingView
         /// - DrawingCurve / DrawingCurveSegment
@@ -69,14 +80,24 @@ namespace RMAC_Efficiency_Addin.DrawingDock.Services
         /// </summary>
         public DrawingView? TryResolveDrawingViewFromSelection()
         {
-            var items = GetSelectionSnapshot();
+            return TryResolveDrawingViewFromSelection(TryGetActiveDocument());
+        }
+
+        /// <summary>
+        /// Tries to resolve a DrawingView from the given document's current selection.
+        /// Document-explicit overload for tests and other callers that want to avoid
+        /// <c>Application.ActiveDocument</c>.
+        /// </summary>
+        public static DrawingView? TryResolveDrawingViewFromSelection(Document? doc)
+        {
+            var items = GetSelectionSnapshot(doc);
             return TryResolveDrawingView(items);
         }
 
         /// <summary>
         /// Tries to resolve a DrawingView from a provided selection snapshot.
         /// </summary>
-        public DrawingView? TryResolveDrawingView(IReadOnlyList<object> selectionItems)
+        public static DrawingView? TryResolveDrawingView(IReadOnlyList<object> selectionItems)
         {
             if (selectionItems == null || selectionItems.Count == 0)
                 return null;
@@ -157,9 +178,13 @@ namespace RMAC_Efficiency_Addin.DrawingDock.Services
 
         private SelectSet? TryGetSelectSet()
         {
+            return TryGetSelectSet(TryGetActiveDocument());
+        }
+
+        private static SelectSet? TryGetSelectSet(Document? doc)
+        {
             try
             {
-                var doc = _app.ActiveDocument;
                 if (doc == null) return null;
                 return doc.SelectSet;
             }
@@ -167,6 +192,12 @@ namespace RMAC_Efficiency_Addin.DrawingDock.Services
             {
                 return null;
             }
+        }
+
+        private Document? TryGetActiveDocument()
+        {
+            try { return _app.ActiveDocument; }
+            catch { return null; }
         }
 
         private static DrawingView? TryGetParentView(object selected)
