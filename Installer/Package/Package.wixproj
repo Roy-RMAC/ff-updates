@@ -1,8 +1,0 @@
-<Project Sdk="WixToolset.Sdk/5.0.2">
-
-  <PropertyGroup>
-    <OutputType>Package</OutputType>
-    <DefineConstants>AddinVersion=$(AddinVersion)</DefineConstants>
-  </PropertyGroup>
-
-</Project>

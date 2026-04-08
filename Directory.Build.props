@@ -1,6 +1,0 @@
-<Project>
-  <!-- Single version number shared by all projects (addin + installer) -->
-  <PropertyGroup>
-    <AddinVersion>1.0.1.0</AddinVersion>
-  </PropertyGroup>
-</Project>
