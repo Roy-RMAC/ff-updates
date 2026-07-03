@@ -1,6 +1,6 @@
 {
   "version": "1.0.9.0",
-  "releaseNotes": "See release notes at https://github.com/Roy-RMAC/ff-updates/releases/tag/v1.0.9.0",
+  "downloadUrl": "https://github.com/Roy-RMAC/ff-updates/releases/download/v1.0.9.0/FabFlowSetup.exe",
   "sha256": "581fe99ab2fbd3cf5cb8d5d37a437b082c47130361167b43d64035c317446459",
-  "downloadUrl": "https://github.com/Roy-RMAC/ff-updates/releases/download/v1.0.9.0/FabFlowSetup.exe"
+  "releaseNotes": "See release notes at https://github.com/Roy-RMAC/ff-updates/releases/tag/v1.0.9.0"
 }
